@@ -61,7 +61,10 @@ class GDSBroadcastCog(commands.Cog, name='구드공-방송'):
                 if not target_str:
                     await ctx.send('경로를 입력해 주세요.')
                     return
-                targets = (target.strip() for target in target_str.split('|') if target)
+                targets = [tar for tar in (target.strip() for target in target_str.split('|')) if tar]
+                if not targets:
+                    await ctx.send('경로를 인식할 수 없습니다.')
+                    return
                 invalid_paths = list()
                 valid_paths = list()
                 for target in targets:
