@@ -183,21 +183,22 @@ class FlaskfarmaiderBot(commands.Bot):
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         '''override'''
         logger.warning(f'Error occurred by name="{ctx.author.name}" id={ctx.author.id} error="{str(error)}"')
-        check_channel = ctx.channel.id in self.config['discord']['bots']['flaskfarmaider']['command']['checks']['channels']
+        message = None
         match type(error):
             case (commands.errors.CheckFailure
                 | commands.errors.CheckAnyFailure
                 | commands.errors.CommandNotFound):
-                if check_channel:
-                    await ctx.send(f'명령을 실행할 수 없습니다. ```{str(error)}```')
+                message = f'명령을 실행할 수 없습니다.'
             case commands.errors.CommandOnCooldown:
-                if check_channel:
-                    await ctx.send(f'잠시 후에 시도해 주세요. ```{str(error)}```')
+                message = f'잠시 후에 시도해 주세요.'
             case commands.errors.MissingRequiredArgument:
-                if check_channel:
-                    await ctx.send(f'추가 인자를 입력해 주세요. ```{str(error)}```')
+                message = f'추가 인자를 입력해 주세요.'
             case _:
                 await super().on_command_error(ctx, error)
+                return
+        check_channels = self.config['discord']['bots']['flaskfarmaider']['command']['checks']['channels']
+        if not check_channels or ctx.channel.id in check_channels:
+            await ctx.send(f'{message} ```{str(error)}```')
 
     async def _broadcast(self, content: str) -> None:
         for channel_id in self.config['discord']['bots']['flaskfarmaider']['broadcast']['target']['channels']:

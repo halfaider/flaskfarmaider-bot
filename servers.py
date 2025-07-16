@@ -38,19 +38,17 @@ class Server:
             auth_required = getattr(handler_func, 'route_auth_required', True)
             if auth_required and self.config.get('keys'):
                 apikey_in_body = None
+                content_type = request.content_type.lower() if request.content_type else ''
                 if request.method == 'POST':
-                    if request.content_type.lower().startswith('application/json'):
-                        try:
-                            data = await request.json()
-                            apikey_in_body = data.get('apikey')
-                        except Exception:
-                            pass
-                    elif request.content_type.lower().startswith(('application/x-www-form-urlencoded', 'multipart/form-data')):
-                        try:
-                            data = await request.post()
-                            apikey_in_body = data.get('apikey')
-                        except Exception:
-                            pass
+                    if content_type.lower().startswith('application/json'):
+                        request_func = request.json
+                    elif content_type.lower().startswith(('application/x-www-form-urlencoded', 'multipart/form-data')):
+                        request_func = request.post
+                    try:
+                        data = await request_func()
+                        apikey_in_body = data.get('apikey')
+                    except Exception as e:
+                        logger.warning(repr(e))
                 for key in (request.headers.get('X-apikey'), request.query.get('apikey'), apikey_in_body):
                     if key in self.config.get('keys'):
                         break
@@ -97,20 +95,25 @@ class FFaiderBotAPI(BotAPIServer):
 
     @route('/api/broadcast', method='POST')
     async def api_broadcast(self, request: web.Request) -> web.Response:
-        if request.content_type.lower().startswith('application/json'):
+        error_response = {'result': 'error', 'error': ''}
+        content_type = request.content_type.lower() if request.content_type else ''
+        if content_type.startswith('application/json'):
             data = await request.json()
-        elif request.content_type.lower().startswith(('application/x-www-form-urlencoded', 'multipart/form-data')):
+        elif content_type.startswith(('application/x-www-form-urlencoded', 'multipart/form-data')):
             data = await request.post()
         else:
-            return web.json_response({'result': 'error', 'error': 'Invalid content type'}, status=400)
+            error_response['error'] = 'Invalid content type'
+            return web.json_response(error_response, status=400)
         path = data.get('path')
         mode = data.get('mode')
-        logger.debug(f'{path=} {mode=}')
         if not path or not mode:
-            return web.json_response({'result': 'error', 'error': 'Invalid values'}, status=400)
+            logger.warning(f'{path=} {mode=}')
+            error_response['error'] = 'Invalid values'
+            return web.json_response(error_response, status=400)
         try:
             await self.bot.broadcast(path, mode)
         except Exception as e:
             logger.exception(repr(e))
-            return web.json_response({'result': 'error', 'error': 'Broadcast failed'}, status=500)
+            error_response['error'] = 'Broadcast failed'
+            return web.json_response(error_response, status=500)
         return web.Response(status=204)
