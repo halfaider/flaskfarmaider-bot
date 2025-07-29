@@ -2,3 +2,5 @@ discord.py
 aiohttp
 pyyaml
 pycryptodome
+pydantic
+pydantic_settings
