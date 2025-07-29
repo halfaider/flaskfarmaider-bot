@@ -10,4 +10,5 @@
 !flaskfarmaider_bot/settings.sample.yaml
 !.gitignore
 !pyproject.toml
+!README.md
 !requirements.txt
