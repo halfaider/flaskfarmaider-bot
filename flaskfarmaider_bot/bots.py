@@ -179,9 +179,8 @@ class FlaskfarmaiderBot(commands.Bot):
         """override"""
         logger.info(f"Logged in as {self.user}")
         await self.add_cog(GDSBroadcastCog(self))
-        setting = self.settings.discord.bots["flaskfarmaider"].api
         if not self.api_server:
-            self.api_server = FFaiderBotAPI(self, setting)
+            self.api_server = FFaiderBotAPI(self, self.settings.api)
             await self.api_server.start()
 
     async def on_close(self) -> None:
@@ -194,10 +193,9 @@ class FlaskfarmaiderBot(commands.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """override"""
-        braodcast = self.settings.discord.bots["flaskfarmaider"].broadcast
         if (
-            message.channel.id in braodcast["source"]["channels"]
-            and message.author.id in braodcast["source"]["authors"]
+            message.channel.id in self.settings.broadcast.source.channels
+            and message.author.id in self.settings.broadcast.source.authors
             and message.content.startswith("```^")
             and message.content.endswith("```")
         ):
@@ -245,14 +243,12 @@ class FlaskfarmaiderBot(commands.Bot):
             case _:
                 await super().on_command_error(ctx, error)
                 return
-        command = self.settings.discord.bots["flaskfarmaider"].command
-        check_channels = command["checks"]["channels"]
+        check_channels = self.settings.discord.command.checks.channels
         if not check_channels or ctx.channel.id in check_channels:
             await ctx.send(f"{message} ```{str(error)}```")
 
     async def _broadcast(self, content: str) -> None:
-        broadcast = self.settings.discord.bots["flaskfarmaider"].broadcast
-        for channel_id in broadcast["target"]["channels"]:
+        for channel_id in self.settings.broadcast.target.channels:
             target_ch = self.get_channel(channel_id)
             if not target_ch:
                 logger.warning(f"Channel {channel_id} not found.")
@@ -277,10 +273,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 "scan_mode": mode,
             },
         }
-        encrypted_data = encrypt(
-            json.dumps(data),
-            self.settings.discord.bots["flaskfarmaider"].broadcast["encrypt"]["key"],
-        )
+        encrypted_data = encrypt(json.dumps(data), self.settings.broadcast.encrypt.key)
         return f"```^{encrypted_data}```"
 
     async def request_broadcast(self) -> None:

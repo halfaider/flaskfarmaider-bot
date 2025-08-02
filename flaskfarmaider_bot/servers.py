@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from aiohttp import web
 from discord.ext import commands
+from .models import APIConfig
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,8 @@ def route(path: str, method: str = "GET", auth_required: bool = True) -> Callabl
 
 class Server:
 
-    def __init__(self, settings: dict = None) -> None:
-        self.settings = {"keys": (), "port": 8080, "host": "0.0.0.0"}
-        if settings:
-            self.settings.update(settings)
+    def __init__(self, settings: APIConfig) -> None:
+        self.settings = settings
         aio_logger = logging.getLogger("aiohttp.access")
         aio_logger.setLevel(logging.DEBUG)
         aio_logger.addHandler(logging.StreamHandler())
@@ -35,7 +34,7 @@ class Server:
             route_info = request.match_info.route
             handler_func = getattr(route_info, "handler", None)
             auth_required = getattr(handler_func, "route_auth_required", True)
-            if auth_required and self.settings.get("keys"):
+            if auth_required and self.settings.keys:
                 apikey_in_body = None
                 content_type = (
                     request.content_type.lower() if request.content_type else ""
@@ -57,7 +56,7 @@ class Server:
                     request.query.get("apikey"),
                     apikey_in_body,
                 ):
-                    if key in self.settings.get("keys"):
+                    if key in self.settings.keys:
                         break
                 else:
                     return web.json_response(
@@ -87,8 +86,8 @@ class Server:
             access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
         )
         await runner.setup()
-        host = self.settings.get("host") or "0.0.0.0"
-        port = self.settings.get("port") or 8080
+        host = self.settings.host or "0.0.0.0"
+        port = self.settings.port or 8080
         site = web.TCPSite(runner, host=host, port=port)
         await site.start()
         logger.info(f"Listen on http://{host}:{port}")
@@ -104,7 +103,7 @@ class APIServer(Server):
 
 class BotAPIServer(APIServer):
 
-    def __init__(self, bot: commands.Bot, settings: dict = None, **kwds: Any) -> None:
+    def __init__(self, bot: commands.Bot, settings: APIConfig, **kwds: Any) -> None:
         super(BotAPIServer, self).__init__(settings=settings, **kwds)
         self.bot = bot
 

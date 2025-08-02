@@ -28,8 +28,7 @@ def main(settings_file: str | os.PathLike | None = None) -> None:
 
     # Global check function
     def check_channel(ctx: commands.Context) -> bool:
-        command = settings.discord.bots["flaskfarmaider"].command
-        if valid_channels := command["checks"]["channels"]:
+        if valid_channels := settings.discord.command.checks.channels:
             if not ctx.channel.id in valid_channels:
                 logger.error(f"Invalid channels: {ctx.channel.name} ({ctx.channel.id})")
                 return False
@@ -40,14 +39,14 @@ def main(settings_file: str | os.PathLike | None = None) -> None:
     intents.message_content = True
 
     bot = FlaskfarmaiderBot(
-        command_prefix=settings.discord.bots["flaskfarmaider"].command["prefix"],
+        command_prefix=settings.discord.command.prefix,
         settings=settings,
         checks=[check_channel],
-        description="Flaskfarmaider",
+        description="flaskfarmaider-bot",
         intents=intents,
     )
     bot.run(
-        settings.discord.bots["flaskfarmaider"].token,
+        settings.discord.token,
         log_level=settings.logging.level_discord,
         log_formatter=logging.Formatter(settings.logging.format),
     )

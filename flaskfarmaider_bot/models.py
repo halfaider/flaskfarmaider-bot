@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from typing import Any, Literal, Union, Annotated, Sequence
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_settings import (
@@ -33,81 +33,47 @@ def get_default_logging_settings() -> dict:
     }
 
 
-def get_default_discord_settings() -> dict:
-    return {
-        "bots": {
-            "flaskfarmaider": FlaskfarmaiderBotConfig(
-                bot_type="flaskfarm",
-                token="",
-                command={"prefix": "!", "checks": {"channels": []}},
-                broadcast={
-                    "source": {"channels": [], "authors": []},
-                    "target": {"channels": []},
-                    "encrypt": {"key": ""},
-                },
-                flaskfarm={"url": "", "apikey": ""},
-                api={"keys": [], "host": "0.0.0.0", "port": 8080},
-            )
-        }
-    }
-
-
 class LoggingConfig(BaseModel):
     level: str
     level_discord: str
     format: str
     date_format: str
-    redacted_patterns: Sequence[str]
+    redacted_patterns: tuple[str, ...]
     redacted_substitute: str
 
 
-class DiscordBotConfig(BaseModel):
-    bot_type: str
-    token: str
-    command: dict = Field(
-        default_factory=lambda: {
-            "prefix": "!",
-            "checks": {"channels": ()},
-        }
-    )
+class DiscordChannelsConfig(BaseModel):
+    channels: tuple[int, ...] = ()
 
 
-class FlaskfarmBotConfig(DiscordBotConfig):
-    bot_type: Literal["flaskfarm"]
-    flaskfarm: dict = Field(default_factory=lambda: {"url": "", "apikey": ""})
-
-
-class FlaskfarmaiderBotConfig(FlaskfarmBotConfig):
-    bot_type: Literal["flaskfarmaider"]
-    broadcast: dict = Field(
-        default_factory=lambda: {
-            "source": {"channels": (), "authors": ()},
-            "target": {"channels": ()},
-            "encrypt": {"key": ""},
-        }
-    )
-    api: dict = Field(
-        default_factory=lambda: {"keys": (), "host": "0.0.0.0", "port": 8080}
-    )
-
-
-class TestBotConfig(DiscordBotConfig):
-    bot_type: Literal["test"]
-    test: dict = Field(default_factory=lambda: {"key": ""})
-
-
-BotUnion = Annotated[
-    Union[FlaskfarmBotConfig, FlaskfarmaiderBotConfig, TestBotConfig],
-    Field(discriminator="bot_type"),
-]
+class DiscordCommandConfig(BaseModel):
+    checks: DiscordChannelsConfig
+    prefix: str = "/"
 
 
 class DiscordConfig(BaseModel):
-    bots: dict[str, BotUnion] = Field(
-        default_factory=lambda: {
-            "flaskfarmaider": FlaskfarmaiderBotConfig(bot_type="flaskfarm", token="")
-        }
-    )
+    token: str = ""
+    command: DiscordCommandConfig
+
+
+class BroadcastSourceConfig(DiscordChannelsConfig):
+    authors: tuple[int, ...] = ()
+
+
+class BraodcastEncryptConfig(BaseModel):
+    key: str = ""
+
+
+class BroadcastConfig(BaseModel):
+    source: BroadcastSourceConfig
+    target: DiscordChannelsConfig
+    encrypt: BraodcastEncryptConfig
+
+
+class APIConfig(BaseModel):
+    keys: tuple[str, ...] = ()
+    port: int = 8080
+    host: str = "0.0.0.0"
 
 
 class MergedYamlSettingsSource(YamlConfigSettingsSource):
@@ -186,6 +152,8 @@ class AppSettings(_BaseSettings):
     """
 
     discord: DiscordConfig
+    broadcast: BroadcastConfig
+    api: APIConfig
     logging: LoggingConfig = Field(default_factory=get_default_logging_settings)
 
     model_config = SettingsConfigDict(
