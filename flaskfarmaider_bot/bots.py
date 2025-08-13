@@ -1,5 +1,7 @@
+import os
 import sys
 import json
+import base64
 import pathlib
 import logging
 import asyncio
@@ -8,9 +10,10 @@ from typing import Awaitable, Any, Callable
 
 import discord
 from discord.ext import commands
+from Crypto import Random
+from Crypto.Cipher import AES
 
 from .servers import FFaiderBotAPI
-from .helpers import encrypt
 from .models import AppSettings
 
 logger = logging.getLogger(__name__)
@@ -166,6 +169,10 @@ class FlaskfarmaiderBot(commands.Bot):
         self.tasks: dict[str, asyncio.Task] = dict()
         self.api_server = None
 
+        self.byte_size = 16
+        self.pad = lambda s: s + (self.byte_size - len(s.encode("utf-8")) % self.byte_size) * chr(self.byte_size - len(s.encode("utf-8")) % self.byte_size)
+        self.unpad = lambda s: s[: -ord(s[len(s) - 1 :])]
+
     async def setup_hook(self):
         """override"""
         if "request_broadcast" not in self.tasks:
@@ -273,7 +280,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 "scan_mode": mode,
             },
         }
-        encrypted_data = encrypt(json.dumps(data), self.settings.broadcast.encrypt.key)
+        encrypted_data = self.encrypt(json.dumps(data), self.settings.broadcast.encrypt.key)
         return f"```^{encrypted_data}```"
 
     async def request_broadcast(self) -> None:
@@ -286,3 +293,23 @@ class FlaskfarmaiderBot(commands.Bot):
                     self.broadcast_queue.task_done()
             except Exception as e:
                 logger.exception(repr(e))
+
+    def encrypt(self, content: str, key: str):
+        content_: bytes = self.pad(content).encode()
+        key_: bytes = key.encode()
+        iv: bytes = Random.new().read(AES.block_size)
+        cipher = AES.new(key_, AES.MODE_CBC, iv)
+        tmp: bytes = cipher.encrypt(content_)
+        result = base64.b64encode(iv + tmp)
+        result = result.decode()
+        return result
+
+    def decrypt(self, encoded: str, key: str):
+        encoded = base64.b64decode(encoded)
+        iv = encoded[:self.byte_size]
+        if len(iv) != self.byte_size:
+            iv = os.urandom(self.byte_size)
+        key_: bytes = key.encode()
+        print(type(key_))
+        cipher = AES.new(key_, AES.MODE_CBC, iv)
+        return self.unpad(cipher.decrypt(encoded[self.byte_size:])).decode()

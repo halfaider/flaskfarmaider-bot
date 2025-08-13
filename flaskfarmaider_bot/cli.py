@@ -34,7 +34,7 @@ def main(*args: Any) -> None:
             - {Path.cwd() / 'settings.yaml'}
             - {package_path / 'config.yaml'}
             - {Path.cwd() / 'config.yaml'}
-        """
+            """
         ),
         default=None,
     )

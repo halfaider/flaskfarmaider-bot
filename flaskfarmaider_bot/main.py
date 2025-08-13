@@ -7,7 +7,7 @@ import pydantic
 
 from .bots import FlaskfarmaiderBot
 from .models import AppSettings
-from .helpers import set_logger
+from .helpers.loggers import set_logger
 
 logger = logging.getLogger(__name__)
 

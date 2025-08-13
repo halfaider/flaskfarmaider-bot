@@ -15,7 +15,6 @@ def route(path: str, method: str = "GET", auth_required: bool = True) -> Callabl
         func.route_method = method.upper()
         func.route_auth_required = auth_required
         return func
-
     return decorator
 
 
@@ -63,7 +62,6 @@ class Server:
                         {"result": "error", "error": "Unauthorized"}, status=401
                     )
             return await handler(request)
-
         return middleware_handler
 
     async def start(self) -> None:
