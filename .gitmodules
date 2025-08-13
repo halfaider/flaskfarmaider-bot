@@ -1,0 +1,3 @@
+[submodule "flaskfarmaider_bot/helpers"]
+	path = flaskfarmaider_bot/helpers
+	url = https://github.com/halfaider/helpers
