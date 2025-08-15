@@ -261,10 +261,20 @@ class FlaskfarmaiderBot(commands.Bot):
                 logger.warning(f"Channel {channel_id} not found.")
                 continue
             logger.debug(f'Broadcast to {channel_id}: "{content}"')
-            try:
-                await target_ch.send(content)
-            except Exception:
-                logger.exception(f"Failed to send message to {channel_id}: {content=}")
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    await target_ch.send(content)
+                    break
+                except discord.errors.DiscordServerError as e:
+                    logger.error(f"Failed to send the message ({attempt + 1} / {max_retries}): {e}")
+                    if attempt < max_retires - 1:
+                        await asyncio.sleep(5)
+                    else:
+                        logger.error(f"Maximum retry count exceeded for {channel_id}.")
+                except Exception:
+                    logger.exception(f"An unexpected error occurred while sendig to {channel_id}: {content=}")
+                    break
 
     async def broadcast(self, path: str, mode: str) -> None:
         content = self.get_broadcast_content(path, mode)
