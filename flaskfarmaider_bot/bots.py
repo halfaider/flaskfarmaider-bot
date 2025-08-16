@@ -268,7 +268,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     break
                 except discord.errors.DiscordServerError as e:
                     logger.error(f"Failed to send the message ({attempt + 1} / {max_retries}): {e}")
-                    if attempt < max_retires - 1:
+                    if attempt < max_retries - 1:
                         await asyncio.sleep(5)
                     else:
                         logger.error(f"Maximum retry count exceeded for {channel_id}.")
