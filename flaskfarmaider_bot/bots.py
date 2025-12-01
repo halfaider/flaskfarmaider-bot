@@ -45,7 +45,8 @@ class FlaskfarmaiderHelpCommand(commands.DefaultHelpCommand):
         command_name = self.invoked_with
         return (
             f'"{self.context.clean_prefix}{command_name} (명령어)"를 입력해서 상세 정보를 확인하세요.\n'
-            f'카테고리 상세 정보를 확인하려면 "{self.context.clean_prefix}{command_name} (카테고리)"를 입력하세요.'
+            f'카테고리 상세 정보를 확인하려면 "{self.context.clean_prefix}{command_name} (카테고리)"를 입력하세요.\n'
+            f'https://github.com/halfaider/flaskfarmaider-bot'
         )
 
 
@@ -320,6 +321,5 @@ class FlaskfarmaiderBot(commands.Bot):
         if len(iv) != self.byte_size:
             iv = os.urandom(self.byte_size)
         key_: bytes = key.encode()
-        print(type(key_))
         cipher = AES.new(key_, AES.MODE_CBC, iv)
         return self.unpad(cipher.decrypt(encoded[self.byte_size:])).decode()
