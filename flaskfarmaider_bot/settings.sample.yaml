@@ -1,15 +1,10 @@
-logging:
-  level: DEBUG
-  level_discord: INFO
-  format: '%(asctime)s,%(msecs)03d|%(levelname)-8s %(message)s ... %(filename)s:%(lineno)d'
-  date_format: '%Y-%m-%d %H:%M:%S'
-  redacted_patterns:
-    - "apikey=(.{10,36})"
-    - "['\"]apikey['\"]: ['\"](.{10,36})['\"]"
-    - "['\"]X-Plex-Token['\"]: ['\"](.{20})['\"]"
-    - "['\"]X-Plex-Token=(.{20})['\"]"
-    - "webhooks/(.+)/(.+):\\s{"
-  redacted_substitute: "<REDACTED>"
+#logging:
+#  level: DEBUG
+#  level_discord: INFO
+#  format: '%(asctime)s %(levelname)-8s %(message)s ... %(filename)s:%(lineno)d'
+#  date_format: '%Y-%m-%d %H:%M:%S'
+#  redacted_patterns: ['[''"]?(?:apikey|X-Plex-Token|token)[''"]?\s*[:=]\s*[''"]?([^''"&\s,{}]+)[''"]?', 'webhooks/([^/\s]+)/([^/\s]+)']
+#  redacted_substitute: "<REDACTED>"
 discord:
   # 봇 토큰
   token: 'zzzzzzzzzzzzzzzzzzzzzzzzzz.zzzzzz.zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
