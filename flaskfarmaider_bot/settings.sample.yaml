@@ -15,28 +15,25 @@ discord:
         # 봇 명령어가 허용되는 채널
         - 1344xxxxxxxxxxx0822 # SJVA 서버의 구드공-방송 채널 ID
 broadcast:
-  # FlaskFarmBot 서버의 bot_gds_vod(1035xxxxxxxxxxx5738) 채널에 방송이 올라오지 않아 gds_tool의 VOD 변경사항 방송이 작동하지 않음
-  # FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널 웹후크가 "Unknown" 상태라서 gds_tool의 방송하기가 작동하지 않음
-  # FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널 웹후크가 "Unknown" 상태라서 gds_tool의 방송하기가 작동하지 않음
-  # FlaskFarmBot 서버의 bot_gds_movie(1045xxxxxxxxxxx4931) 채널은 정상 작동 중
-  #
   # FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 본인의 봇으로 직접 방송이 가능함
-  # flaskfarmaider 봇을 생성후 FlaskFarmBot 서버에 메시지 전송 권한을 부여해서 설치
+  # 디스코드에서 본인의 봇을 생성후 FlaskFarmBot 서버에 메시지 전송 권한을 부여해서 설치
   #
-  # 방송 방식
-  # 1. 봇이 특정 채널에서 받은 방송 메시지를 다시 FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 전송
-  #   - 봇을 source.channels의 서버에 설치
+  # 두 가지 방송 방식
+  # 1. source 채널에 수신된 메시지를 target 채널에 송신
+  #   - 봇이 특정 채널에서 받은 방송 메시지를 다시 FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 전송
+  #   - 봇을 본인의 디스코드 서버에 설치 후 source.channels를 본인의 서버 채널로 설정
   #   - gds_tool의 "방송 하기" 웹후크를 아래 source.channels의 웹후크로 수정
   #   - gds_tool의 "방송 하기"로 source.channels에 방송 (웹 혹은 API)
   #   - flaskfarmaider 봇이 source.channels에서 수신된 방송을 다시 FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널로 송신
-  # 2. 봇 API로 입력받은 방송을 직접 FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 전송
+  # 2. 봇 API로 입력받은 내용을 직접 FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 전송
   #   - curl -v "http://localhost:8080/api/broadcast?apikey=bot-api-key" -d 'path=/ROOT/GDRIVE/THIS/IS/A/TEST' -d 'mode=REFRESH'
   source:
     # 채널 ID와 저자(웹훅) ID가 일치하고 메시지가 방송용 콘텐츠(```암호화된 문자열```)일 경우 방송
+    # 봇 API로 입력할 경우 설정할 필요 없음
     #channels:
     #  - xxxxxxxxxxxxxxxxxxx # 봇이 듣고 있을 채널 ID
     #authors:
-    #  - yyyyyyyyyyyyyyyyyyy # 봇이 들고 있을 채널의 웹훅 ID
+    #  - yyyyyyyyyyyyyyyyyyy # 봇이 듣고 있을 채널의 웹훅 ID
   target:
     # 방송을 보낼 채널 ID
     channels:
@@ -48,7 +45,7 @@ api:
   # api 설정
   # POST, http://0.0.0.0:8080/api/broadcast
   #keys:
-    # api key는 여러개 설정 가능하며 사용하지 않을 경우 입력하지 않음
+    # api key는 여러개 설정 가능하며 입력하지 않을 경우 api key를 사용하지 않음
     # api key는 헤더, 쿼리, 바디 중 어디에 넣어도 상관 없음
     # 헤더: 'X-apikey: bot-api-key'
     # 쿼리: '?apikey=bot-api-key'
