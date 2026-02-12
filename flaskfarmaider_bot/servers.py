@@ -146,13 +146,12 @@ class FFaiderBotAPI(BotAPIServer):
 
     async def _handle_broadcast(self, data: Mapping, app: str, required_values: Sequence[str]) -> web.Response:
         error_response = {"result": "error", "error": ""}
-        values = tuple(data.get(key) for key in required_values)
-        if not all(values):
-            logger.warning(f"Invalid values for {app}: {dict(zip(required_values, values))}")
+        if not all(data.get(key) for key in required_values):
+            logger.warning(f"Invalid values for {app}: {data}")
             error_response["error"] = "Invalid values"
             return web.json_response(error_response, status=400)
         try:
-            await self.bot.broadcast_queue.put((app, *values))
+            await self.bot.broadcast_queue.put((app, data))
         except Exception:
             logger.exception("Broadcast failed")
             error_response["error"] = "Broadcast failed"

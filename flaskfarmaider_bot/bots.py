@@ -70,7 +70,7 @@ class FlaskfarmaiderBot(commands.Bot):
         for check in checks:
             self.add_check(check)
         self.help_command = FlaskfarmaiderHelpCommand(command_attrs={"checks": checks})
-        self.broadcast_queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
+        self.broadcast_queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self.tasks: dict[str, asyncio.Task] = dict()
         self.api_server = None
         self.byte_size = 16
@@ -190,8 +190,8 @@ class FlaskfarmaiderBot(commands.Bot):
         content = self.get_broadcast_gds_content(path, mode)
         await self._broadcast(content)
 
-    async def broadcast_downloader(self, path: str, item: str) -> None:
-        content = await self.get_broadcast_downloader_content(path, item)
+    async def broadcast_downloader(self, path: str, item: str, file_count: int = 0, total_size: int = 0) -> None:
+        content = await self.get_broadcast_downloader_content(path, item, file_count=file_count, total_size=total_size)
         # logger.debug(content)
         await self._broadcast(content)
 
@@ -277,7 +277,7 @@ class FlaskfarmaiderBot(commands.Bot):
         return "Unknown"
 
     def _build_movie_data(
-        self, metadata: dict, path: Path, item: str, module: str, file_title: str
+        self, metadata: dict, path: Path, item: str, module: str, file_title: str, file_count: int, total_size: int
     ) -> dict:
         no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
         metadata = metadata or {}
@@ -295,7 +295,7 @@ class FlaskfarmaiderBot(commands.Bot):
             "t2": module,
             "data": {
                 "ca": ca,
-                "count": -1,
+                "count": file_count,
                 "folderid": item,
                 "foldername": str(path),
                 "meta": {
@@ -313,7 +313,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     or "Unknown",
                     "year": metadata.get("year", 1900),
                 },
-                "size": -1,
+                "size": total_size,
                 "subject": file_title,
             },
         }
@@ -362,8 +362,8 @@ class FlaskfarmaiderBot(commands.Bot):
             },
         }
 
-    async def get_broadcast_downloader_content(self, path: str, item: str) -> str:
-        logger.debug(f"{path=} {item=}")
+    async def get_broadcast_downloader_content(self, path: str, item: str, file_count: int = 0, total_size: int = 0) -> str:
+        logger.debug(f"{path=} {item=} {file_count=} {total_size=}")
         full_path = Path(path)
         category, module = self._get_category_and_module(full_path)
         parsed_parts = PTN.parse(full_path.stem)
@@ -373,7 +373,7 @@ class FlaskfarmaiderBot(commands.Bot):
         metadata = await self._fetch_metadata(full_path, category, file_title, year)
         if category == "movie":
             data = self._build_movie_data(
-                metadata, full_path.name, item, module, file_title
+                metadata, full_path.name, item, module, file_title, file_count, total_size
             )
         else:
             data = self._build_vod_data(
@@ -385,14 +385,22 @@ class FlaskfarmaiderBot(commands.Bot):
         return f"```^{encrypted_data}```"
 
     async def _broadcast_worker(self) -> None:
-        handlers = {"gds": self.broadcast_gds, "downloader": self.broadcast_downloader}
         logger.debug("Broadcast worker started.")
         try:
             while not self.is_closed():
                 try:
-                    handler, path, extra = await self.broadcast_queue.get()
+                    handler, data = await self.broadcast_queue.get()
+                    path = data.get('path')
+                    extra = data.get('mode') or data.get('item')
+                    file_count = data.get('file_count') or 1
+                    total_size = data.get('total_size') or 0
                     try:
-                        await handlers[handler](path, extra)
+                        if handler == 'gds':
+                            self.broadcast_gds,(path, extra)
+                        elif handler == 'downloader':
+                            self.broadcast_downloader(path, extra, file_count, total_size)
+                        else:
+                            logger.error(f"No handler: {handler}")
                     except Exception:
                         logger.exception(
                             f"Failed to broadcast: {handler=} {path=} {extra=}"
@@ -481,7 +489,7 @@ class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
                         invalid_paths.append(target)
                     elif target.startswith("/ROOT/GDRIVE/"):
                         logger.debug(f"author={ctx.author.name} {mode=} {target=}")
-                        await self.bot.broadcast_queue.put(("gds", target, mode))
+                        await self.bot.broadcast_queue.put(("gds", {'path': target, 'mode': mode}))
                         valid_paths.append(target)
                     else:
                         invalid_paths.append(target)
