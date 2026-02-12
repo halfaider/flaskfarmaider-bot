@@ -398,7 +398,7 @@ class FlaskfarmaiderBot(commands.Bot):
                         if handler == 'gds':
                             self.broadcast_gds,(path, extra)
                         elif handler == 'downloader':
-                            self.broadcast_downloader(path, extra, file_count, total_size)
+                            await self.broadcast_downloader(path, extra, file_count, total_size)
                         else:
                             logger.error(f"No handler: {handler}")
                     except Exception:
