@@ -343,6 +343,8 @@ class FlaskfarmaiderBot(commands.Bot):
         module: str,
         file_title: str,
         parsed: dict,
+        file_count: int = 0,
+        total_size: int = 0,
     ) -> dict:
         no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
         metadata = metadata or {}
@@ -366,7 +368,8 @@ class FlaskfarmaiderBot(commands.Bot):
                     or no_poster,
                     "title": metadata.get("title") or "Unknown",
                 },
-                "s": 0,
+                "s": total_size,
+                "c": file_count,
                 "vod": {
                     "date": date_match.group() if date_match else "",
                     "name": file_title,
@@ -402,7 +405,14 @@ class FlaskfarmaiderBot(commands.Bot):
             )
         else:
             data = self._build_vod_data(
-                metadata, full_path, item, module, file_title, parsed_parts
+                metadata,
+                full_path,
+                item,
+                module,
+                file_title,
+                parsed_parts,
+                file_count,
+                total_size,
             )
         encrypted_data = self.encrypt(
             json.dumps(data), self.settings.broadcast.encrypt.key
