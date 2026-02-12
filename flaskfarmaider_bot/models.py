@@ -65,6 +65,11 @@ class APIConfig(BaseModel):
     host: str = "0.0.0.0"
 
 
+class FlaskfarmServer(BaseModel):
+    url: str = "http://localhost:9999"
+    apikey: str = ""
+
+
 class AppSettings(_BaseSettings):
     """
     앱 실행시 사용하는 설정값 클래스
@@ -73,6 +78,7 @@ class AppSettings(_BaseSettings):
     discord: DiscordConfig
     broadcast: BroadcastConfig
     api: APIConfig
+    flaskfarm: FlaskfarmServer
     logging: LoggingConfig = Field(default_factory=get_default_logging_settings)
 
     def model_post_init(self, context: Any, /) -> None:

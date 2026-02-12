@@ -4,3 +4,4 @@ pyyaml
 pycryptodome
 pydantic
 pydantic_settings
+parse-torrent-title

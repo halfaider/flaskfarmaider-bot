@@ -55,3 +55,7 @@ api:
   #port: 8080
   # 특정 호스트명으로만 접속 가능하게 할 경우 지정, 그 외 0.0.0.0
   #host: '0.0.0.0'
+flaskfarm:
+  # flaskfarm 서버
+  url: 'http://flaskfarm:9999'
+  apikey: 1234567890
