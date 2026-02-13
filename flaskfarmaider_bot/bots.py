@@ -166,7 +166,7 @@ class FlaskfarmaiderBot(commands.Bot):
             if not target_ch:
                 logger.warning(f"Channel {channel_id} not found.")
                 continue
-            logger.debug(f'Broadcast to {channel_id}: "{content}"')
+            logger.debug(f"Broadcast to {channel_id}")
             max_retries = 3
             for attempt in range(max_retries):
                 try:
@@ -190,6 +190,7 @@ class FlaskfarmaiderBot(commands.Bot):
         self, path: str, mode: str, file_count: int = 0, total_size: int = 0
     ) -> None:
         content = self.get_broadcast_gds_content(path, mode, file_count, total_size)
+        logger.debug(f"Broadcast GDS: {mode=} {path=}")
         await self._broadcast(content)
 
     async def broadcast_downloader(
@@ -198,7 +199,7 @@ class FlaskfarmaiderBot(commands.Bot):
         content = await self.get_broadcast_downloader_content(
             path, item, file_count=file_count, total_size=total_size
         )
-        # logger.debug(content)
+        logger.debug(f"Broadcast Downloader: {item=} {file_count=} {total_size=} {path=}")
         await self._broadcast(content)
 
     def get_broadcast_gds_content(
