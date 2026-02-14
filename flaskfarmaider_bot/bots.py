@@ -74,6 +74,7 @@ class FlaskfarmaiderBot(commands.Bot):
         self.tasks: dict[str, asyncio.Task] = dict()
         self.api_server = None
         self.byte_size = 16
+        self.no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
 
     async def setup_hook(self):
         """override"""
@@ -199,7 +200,9 @@ class FlaskfarmaiderBot(commands.Bot):
         content = await self.get_broadcast_downloader_content(
             path, item, file_count=file_count, total_size=total_size
         )
-        logger.debug(f"Broadcast Downloader: {item=} {file_count=} {total_size=} {path=}")
+        logger.debug(
+            f"Broadcast Downloader: {item=} {file_count=} {total_size=} {path=}"
+        )
         await self._broadcast(content)
 
     def get_broadcast_gds_content(
@@ -297,11 +300,12 @@ class FlaskfarmaiderBot(commands.Bot):
         file_count: int,
         total_size: int,
     ) -> dict:
-        no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
         metadata = metadata or {}
         countries = metadata.get("country") or []
         ca = "Unknown"
-        if countries:
+        if path.is_relative_to("/ROOT/GDRIVE/VIDEO/영화/최신"):
+            ca = "최신"
+        elif countries:
             for korea in ("한국", "대한민국", "Korea"):
                 if korea in countries:
                     ca = "한국"
@@ -325,7 +329,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     or "",
                     "poster": metadata.get("main_poster")
                     or metadata.get("image_url")
-                    or no_poster,
+                    or self.no_poster,
                     "title": metadata.get("title")
                     or metadata.get("title_en")
                     or "Unknown",
@@ -347,7 +351,6 @@ class FlaskfarmaiderBot(commands.Bot):
         file_count: int = 0,
         total_size: int = 0,
     ) -> dict:
-        no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
         metadata = metadata or {}
         date_match = re.search(r"\d{6}", path.stem)
         genres = metadata.get("genre")
@@ -366,7 +369,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     "genre": genre,
                     "poster": metadata.get("main_poster")
                     or metadata.get("image_url")
-                    or no_poster,
+                    or self.no_poster,
                     "title": metadata.get("title") or "Unknown",
                 },
                 "s": total_size,
