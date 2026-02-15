@@ -1,9 +1,9 @@
 from asyncio import Queue
-from typing import Protocol
+from typing import Protocol, Any
 
 
 class Broadcastable(Protocol):
-    broadcast_queue: Queue[tuple[str, str, str]]
+    broadcast_queue: Queue[tuple[str, dict]]
 
     async def broadcast_gds(self, path: str, mode: str) -> None: ...
 

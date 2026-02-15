@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def main(settings_file: str | os.PathLike | None = None) -> None:
     try:
-        settings = AppSettings(user_yaml_file=settings_file)
+        settings = AppSettings(user_yaml_file=settings_file) # type: ignore
     except pydantic.ValidationError as e:
         logger.error(e)
         return
@@ -30,7 +30,8 @@ def main(settings_file: str | os.PathLike | None = None) -> None:
     def check_channel(ctx: commands.Context) -> bool:
         if valid_channels := settings.discord.command.checks.channels:
             if not ctx.channel.id in valid_channels:
-                logger.error(f"Invalid channels: {ctx.channel.name} ({ctx.channel.id})")
+                channel_name = getattr(ctx.channel, 'name', 'Unknown')
+                logger.error(f"Invalid channels: {channel_name} ({ctx.channel.id})")
                 return False
         return True
 
@@ -47,6 +48,6 @@ def main(settings_file: str | os.PathLike | None = None) -> None:
     )
     bot.run(
         settings.discord.token,
-        log_level=settings.logging.level_discord,
+        log_level=getattr(logging, settings.logging.level_discord.upper(), logging.INFO),
         log_formatter=logging.Formatter(settings.logging.format),
     )

@@ -8,27 +8,16 @@ from .helpers.models import _BaseSettings
 logger = logging.getLogger(__name__)
 
 
-def get_default_logging_settings() -> dict:
-    return {
-        "level": "debug",
-        "level_discord": "INFO",
-        "format": "%(asctime)s %(levelname)-8s %(message)s ... %(filename)s:%(lineno)d",
-        "date_format": "%Y-%m-%dT%H:%M:%S",
-        "redacted_patterns": (
-            r"['\"]?(?:apikey|X-Plex-Token|token)['\"]?\s*[:=]\s*['\"]?([^'\"&\s,{}]+)['\"]?",
-            r"webhooks/([^/\s]+)/([^/\s]+)",
-        ),
-        "redacted_substitute": "<REDACTED>",
-    }
-
-
 class LoggingConfig(BaseModel):
-    level: str
-    level_discord: str
-    format: str
-    date_format: str
-    redacted_patterns: tuple[str, ...]
-    redacted_substitute: str
+    level: str = "debug"
+    level_discord: str = "info"
+    format: str = "%(asctime)s %(levelname)-8s %(message)s ... %(filename)s:%(lineno)d"
+    date_format: str = "%Y-%m-%dT%H:%M:%S"
+    redacted_patterns: tuple[str, ...] = (
+        r"['\"]?(?:apikey|X-Plex-Token|token)['\"]?\s*[:=]\s*['\"]?([^'\"&\s,{}]+)['\"]?",
+        r"webhooks/([^/\s]+)/([^/\s]+)",
+    )
+    redacted_substitute: str = "<REDACTED>"
 
 
 class DiscordChannelsConfig(BaseModel):
@@ -79,7 +68,7 @@ class AppSettings(_BaseSettings):
     broadcast: BroadcastConfig
     api: APIConfig
     flaskfarm: FlaskfarmServer
-    logging: LoggingConfig = Field(default_factory=get_default_logging_settings)
+    logging: LoggingConfig = LoggingConfig()
 
     def model_post_init(self, context: Any, /) -> None:
         """override"""

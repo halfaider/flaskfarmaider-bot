@@ -167,6 +167,9 @@ class FlaskfarmaiderBot(commands.Bot):
             if not target_ch:
                 logger.warning(f"Channel {channel_id} not found.")
                 continue
+            if not isinstance(target_ch, discord.abc.Messageable):
+                logger.warning(f"Channel {channel_id} is not messageable.")
+                continue
             logger.debug(f"Broadcast to {channel_id}")
             max_retries = 3
             for attempt in range(max_retries):
@@ -239,7 +242,7 @@ class FlaskfarmaiderBot(commands.Bot):
 
     async def _fetch_metadata(
         self, path: Path, category: str, file_title: str, year: int
-    ) -> dict | list | None:
+    ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=}")
         default_query = {
             "apikey": self.settings.flaskfarm.apikey,
@@ -319,7 +322,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 "ca": ca,
                 "count": file_count,
                 "folderid": item,
-                "foldername": str(path),
+                "foldername": path.name,
                 "meta": {
                     "code": metadata.get("code") or "Unknown",
                     "country": countries,
@@ -400,7 +403,7 @@ class FlaskfarmaiderBot(commands.Bot):
         if category == "movie":
             data = self._build_movie_data(
                 metadata,
-                full_path.name,
+                full_path,
                 item,
                 module,
                 file_title,

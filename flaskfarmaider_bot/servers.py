@@ -1,6 +1,6 @@
 import logging
 import inspect
-from typing import Any, Callable, Mapping, Awaitable, Sequence
+from typing import Any, Callable, Awaitable, Sequence, TypeVar
 from functools import wraps
 
 from aiohttp import web
@@ -10,12 +10,14 @@ from .protocols import Broadcastable
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T", bound=Callable[..., Any])
+
 
 def route(path: str, method: str = "GET", auth_required: bool = True) -> Callable:
-    def decorator(func: Callable) -> Callable:
-        func.route_path = path
-        func.route_method = method.upper()
-        func.route_auth_required = auth_required
+    def decorator(func: T) -> T:
+        setattr(func, "route_path", path)
+        setattr(func, "route_method", method.upper())
+        setattr(func, "route_auth_required", auth_required)
         return func
 
     return decorator
@@ -144,7 +146,9 @@ class BotAPIServer(APIServer):
 
 class FFaiderBotAPI(BotAPIServer):
 
-    async def _handle_broadcast(self, data: Mapping, app: str, required_values: Sequence[str]) -> web.Response:
+    async def _handle_broadcast(
+        self, data: dict, app: str, required_values: Sequence[str]
+    ) -> web.Response:
         error_response = {"result": "error", "error": ""}
         if not all(data.get(key) for key in required_values):
             logger.warning(f"Invalid values for {app}: {data}")
@@ -160,15 +164,13 @@ class FFaiderBotAPI(BotAPIServer):
 
     @route("/api/broadcasts/gds", method="POST")
     @validate_post_data
-    async def api_broadcast_gds(
-        self, request: web.Request, data: Mapping
-    ) -> web.Response:
-        return await self._handle_broadcast(data, 'gds', ('path', 'mode'))
+    async def api_broadcast_gds(self, request: web.Request, data: dict) -> web.Response:
+        return await self._handle_broadcast(data, "gds", ("path", "mode"))
 
     @route("/api/broadcasts/downloader", method="POST")
     @validate_post_data
     async def api_broadcast_downloader(
-        self, request: web.Request, data: Mapping
+        self, request: web.Request, data: dict
     ) -> web.Response:
         logger.debug(data)
-        return await self._handle_broadcast(data, 'downloader', ('path', 'item'))
+        return await self._handle_broadcast(data, "downloader", ("path", "item"))
