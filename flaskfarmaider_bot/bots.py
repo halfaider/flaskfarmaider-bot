@@ -235,10 +235,13 @@ class FlaskfarmaiderBot(commands.Bot):
         return "ktv", "vod"
 
     def _get_file_title(self, path: Path, parsed: dict) -> str:
-        match = re.split(r"\.[S\d]*E\d+", path.name)
+        pattern = r"^(.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))"
+        match = re.search(pattern, path.name, re.IGNORECASE)
         if match:
-            return " ".join(t for t in re.split(r"[\.\s]+", match[0]) if t)
-        return (parsed.get("title") or "").strip(".")
+            candidate = match.group(1)
+        else:
+            candidate = (parsed or {}).get("title") or ""
+        return ' '.join(candidate.replace('.', ' ').split()).strip()
 
     async def _fetch_metadata(
         self, path: Path, category: str, file_title: str, year: int
