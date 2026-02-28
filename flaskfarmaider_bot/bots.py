@@ -393,7 +393,7 @@ class FlaskfarmaiderBot(commands.Bot):
         else:
             genre = genres or self._get_genre_from_path(path)
         if (thumbs := metadata.get("thumb")) and isinstance(thumbs, list):
-            poster = thumbs[0]
+            poster = thumbs[0].get("value") or thumbs[0].get('thumb') or self.no_poster
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url") or self.no_poster
         return {
