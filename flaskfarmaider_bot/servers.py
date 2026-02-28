@@ -172,5 +172,4 @@ class FFaiderBotAPI(BotAPIServer):
     async def api_broadcast_downloader(
         self, request: web.Request, data: dict
     ) -> web.Response:
-        logger.debug(data)
         return await self._handle_broadcast(data, "downloader", ("path", "item"))
