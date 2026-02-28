@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flaskfarmaider_bot"
-version = "0.3.3"
+version = "0.3.4"
 dynamic = ["dependencies"]
 
 [project.scripts]
