@@ -392,6 +392,10 @@ class FlaskfarmaiderBot(commands.Bot):
             genre = genres[0]
         else:
             genre = genres or self._get_genre_from_path(path)
+        if (thumbs := metadata.get("thumb")) and isinstance(thumbs, list):
+            poster = thumbs[0]
+        else:
+            poster = metadata.get("main_poster") or metadata.get("image_url") or self.no_poster
         return {
             "t1": "bot_downloader",
             "t2": module,
@@ -401,9 +405,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 "meta": {
                     "code": metadata.get("code") or "Unknown",
                     "genre": genre,
-                    "poster": metadata.get("main_poster")
-                    or metadata.get("image_url")
-                    or self.no_poster,
+                    "poster": poster,
                     "title": metadata.get("title") or "Unknown",
                 },
                 "s": total_size,
