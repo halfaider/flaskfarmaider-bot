@@ -235,13 +235,15 @@ class FlaskfarmaiderBot(commands.Bot):
         return "ktv", "vod"
 
     def _get_file_title(self, path: Path, parsed: dict) -> str:
-        pattern = r"^(.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))"
+        pattern = (
+            r"^(.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))"
+        )
         match = re.search(pattern, path.name, re.IGNORECASE)
         if match:
             candidate = match.group(1)
         else:
             candidate = (parsed or {}).get("title") or ""
-        return ' '.join(candidate.replace('.', ' ').split()).strip()
+        return " ".join(candidate.replace(".", " ").split()).strip()
 
     async def _fetch_metadata(
         self, path: Path, category: str, file_title: str, year: int
@@ -303,8 +305,9 @@ class FlaskfarmaiderBot(commands.Bot):
         item: str,
         module: str,
         file_title: str,
-        file_count: int,
-        total_size: int,
+        file_count: int = 0,
+        total_size: int = 0,
+        parsed: dict = {},
     ) -> dict:
         metadata = metadata or {}
         countries = metadata.get("country") or []
@@ -328,8 +331,9 @@ class FlaskfarmaiderBot(commands.Bot):
                 "foldername": path.name,
                 "meta": {
                     "code": metadata.get("code") or "Unknown",
+                    # 검색 결과는 장르와 국가 정보가 없음
                     "country": countries,
-                    "genre": metadata.get("genre") or [self._get_genre_from_path(path)],
+                    "genre": metadata.get("genre") or "Unknown",
                     "originaltitle": metadata.get("originaltitle")
                     or metadata.get("title_original")
                     or "",
@@ -353,9 +357,9 @@ class FlaskfarmaiderBot(commands.Bot):
         item: str,
         module: str,
         file_title: str,
-        parsed: dict,
         file_count: int = 0,
         total_size: int = 0,
+        parsed: dict = {},
     ) -> dict:
         metadata = metadata or {}
         date_match = re.search(r"\d{6}", path.stem)
@@ -404,26 +408,19 @@ class FlaskfarmaiderBot(commands.Bot):
         year = parsed_parts.get("year") or 1900
         metadata = await self._fetch_metadata(full_path, category, file_title, year)
         if category == "movie":
-            data = self._build_movie_data(
-                metadata,
-                full_path,
-                item,
-                module,
-                file_title,
-                file_count,
-                total_size,
-            )
+            builder = self._build_movie_data
         else:
-            data = self._build_vod_data(
-                metadata,
-                full_path,
-                item,
-                module,
-                file_title,
-                parsed_parts,
-                file_count,
-                total_size,
-            )
+            builder = self._build_vod_data
+        data = builder(
+            metadata=metadata,
+            path=full_path,
+            item=item,
+            module=module,
+            file_title=file_title,
+            file_count=file_count,
+            total_size=total_size,
+            parsed=parsed_parts,
+        )
         encrypted_data = self.encrypt(
             json.dumps(data), self.settings.broadcast.encrypt.key
         )

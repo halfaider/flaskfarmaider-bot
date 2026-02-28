@@ -1,5 +1,5 @@
 from asyncio import Queue
-from typing import Protocol, Any
+from typing import Protocol
 
 
 class Broadcastable(Protocol):
