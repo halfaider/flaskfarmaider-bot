@@ -359,7 +359,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     "code": metadata.get("code") or "Unknown",
                     # 검색 결과는 장르와 국가 정보가 없음
                     "country": countries,
-                    "genre": metadata.get("genre") or "Unknown",
+                    "genre": metadata.get("genre") or [],
                     "originaltitle": metadata.get("originaltitle")
                     or metadata.get("title_original")
                     or "",
