@@ -272,11 +272,13 @@ class FlaskfarmaiderBot(commands.Bot):
             api_path = f"/metadata/api/{category}/search"
             url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
             try:
-                
+
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         search_result = await response.json()
-                        no_search_result_msg = f"No search results: {file_title=} {search_result=}"
+                        no_search_result_msg = (
+                            f"No search results: {file_title=} {search_result=}"
+                        )
                         if not search_result:
                             logger.warning(no_search_result_msg)
                             return {}
@@ -394,10 +396,18 @@ class FlaskfarmaiderBot(commands.Bot):
             genre = genres[0]
         else:
             genre = genres or self._get_genre_from_path(path)
+        poster = None
         if (thumbs := metadata.get("thumb")) and isinstance(thumbs, list):
-            poster = thumbs[0].get("value") or thumbs[0].get('thumb') or self.no_poster
+            poster = thumbs[0].get("value") or thumbs[0].get("thumb")
+        elif (arts := metadata.get("art")) and isinstance(arts, list):
+            for art in arts:
+                if art.get("aspect") == "poster":
+                    poster = art.get("value") or art.get("thumb")
+                    break
         else:
-            poster = metadata.get("main_poster") or metadata.get("image_url") or self.no_poster
+            poster = metadata.get("main_poster") or metadata.get("image_url")
+        if not poster:
+            poster = self.no_poster
         return {
             "t1": "bot_downloader",
             "t2": module,
