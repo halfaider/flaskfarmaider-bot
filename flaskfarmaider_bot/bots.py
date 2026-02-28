@@ -397,13 +397,14 @@ class FlaskfarmaiderBot(commands.Bot):
         else:
             genre = genres or self._get_genre_from_path(path)
         poster = None
-        if isinstance(metadata.get("thumb") or metadata.get("art"), list):
-            image_list = sorted(
+        image_list = metadata.get("thumb") or metadata.get("art")
+        if isinstance(image_list, list):
+            sorted_image_list = sorted(
                 image_list,
                 key=lambda x: (x.get("aspect") == "poster", x.get("score") or 0),
                 reverse=True,
             )
-            poster = next(iter(image_list), None)
+            poster = next(iter(sorted_image_list), None)
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
