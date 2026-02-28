@@ -272,11 +272,13 @@ class FlaskfarmaiderBot(commands.Bot):
             api_path = f"/metadata/api/{category}/search"
             url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
             try:
+                
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         search_result = await response.json()
+                        no_search_result_msg = f"No search results: {file_title=} {search_result=}"
                         if not search_result:
-                            logger.warning(f"No search results: {search_result}")
+                            logger.warning(no_search_result_msg)
                             return {}
                         if isinstance(search_result, list):
                             first_result = search_result[0]
@@ -285,14 +287,14 @@ class FlaskfarmaiderBot(commands.Bot):
                             first_site = next(iter(search_result), None)
                             site = search_result[first_site] if first_site else {}
                             if not site:
-                                logger.warning(f"No search results: {search_result}")
+                                logger.warning(no_search_result_msg)
                                 return {}
                             if isinstance(site, list):
                                 first_result = site[0]
                             else:
                                 first_result = site
                         else:
-                            logger.warning(f"No search results: {search_result}")
+                            logger.warning(no_search_result_msg)
                             first_result = {}
                     if code := first_result.get("code"):
                         info_query = default_query | {"code": code}
@@ -304,7 +306,7 @@ class FlaskfarmaiderBot(commands.Bot):
                         async with session.get(info_url) as info_response:
                             return await info_response.json()
                     else:
-                        logger.warning(f"No code: {first_result}")
+                        logger.warning(f"No code: {file_title=} {first_result=}")
                         return {}
             except Exception:
                 logger.exception(f"Metadata fetch failed: {path=}")
