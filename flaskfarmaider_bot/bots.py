@@ -258,33 +258,57 @@ class FlaskfarmaiderBot(commands.Bot):
             code_prefix = "MT" if category == "movie" else "FT"
             query = default_query | {"code": f"{code_prefix}{tmdb_match.group(1)}"}
             api_path = f"/metadata/api/{'ftv' if category == 'ktv' else category}/info"
+            url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as response:
+                        return await response.json() or {}
+            except Exception:
+                logger.exception(f"Metadata fetch failed: {path=}")
+                return {}
         else:
+            # 검색 후 첫번째 결과의 info를 return
             query = default_query | {"keyword": file_title, "year": year}
             api_path = f"/metadata/api/{category}/search"
-        url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    # 영화 및 FTV 서치 목록
-                    result = await response.json()
-                    if isinstance(result, list):
-                        return result[0] if result else {}
-                    # KTV 서치 목록
-                    if (
-                        isinstance(result, dict)
-                        and category == "ktv"
-                        and not tmdb_match
-                    ):
-                        first_site = next(iter(result), None)
-                        site = result[first_site] if first_site else {}
-                        if isinstance(site, list):
-                            return site[0] if site else {}
-                        return site
-                    # 영화, FTV Info
-                    return result or {}
-        except Exception:
-            logger.exception(f"Metadata fetch failed: {path=}")
-            return {}
+            url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as response:
+                        search_result = await response.json()
+                        if not search_result:
+                            logger.warning(f"No search results: {search_result}")
+                            return {}
+                        if isinstance(search_result, list):
+                            first_result = search_result[0]
+                        # KTV 서치 목록
+                        elif isinstance(search_result, dict):
+                            first_site = next(iter(search_result), None)
+                            site = search_result[first_site] if first_site else {}
+                            if not site:
+                                logger.warning(f"No search results: {search_result}")
+                                return {}
+                            if isinstance(site, list):
+                                first_result = site[0]
+                            else:
+                                first_result = site
+                        else:
+                            logger.warning(f"No search results: {search_result}")
+                            first_result = {}
+                    if code := first_result.get("code"):
+                        info_query = default_query | {"code": code}
+                        info_api_path = f"/metadata/api/{category}/info"
+                        info_url = urljoin(
+                            self.settings.flaskfarm.url,
+                            f"{info_api_path}?{urlencode(info_query)}",
+                        )
+                        async with session.get(info_url) as info_response:
+                            return await info_response.json()
+                    else:
+                        logger.warning(f"No code: {first_result}")
+                        return {}
+            except Exception:
+                logger.exception(f"Metadata fetch failed: {path=}")
+                return {}
 
     def _get_genre_from_path(self, path: Path) -> str:
         for root in (
