@@ -229,6 +229,8 @@ class FlaskfarmaiderBot(commands.Bot):
 
     def _get_category_and_module(self, path: Path) -> tuple[str, str]:
         if path.is_relative_to("/ROOT/GDRIVE/VIDEO/방송중/외국"):
+            if path.stem.endswith(("-SW", "-ST")):
+                return "ktv", "vod"
             return "ftv", "vod"
         if path.is_relative_to("/ROOT/GDRIVE/VIDEO/영화"):
             return "movie", "share_movie"
