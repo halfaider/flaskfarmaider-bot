@@ -406,7 +406,8 @@ class FlaskfarmaiderBot(commands.Bot):
                 key=lambda x: (x.get("aspect") == "poster", x.get("score") or 0),
                 reverse=True,
             )
-            poster = next(iter(sorted_image_list), None)
+            if selected := next(iter(sorted_image_list), None):
+                poster = selected.get('value') or selected.get('thumb')
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
