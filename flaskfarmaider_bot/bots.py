@@ -58,6 +58,27 @@ class FlaskfarmaiderHelpCommand(commands.DefaultHelpCommand):
 class FlaskfarmaiderBot(commands.Bot):
     """Flaskfarm 도우미 봇"""
 
+    NO_POSTER = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
+    OTT_PRIORITY_ROOTS = (
+        Path("/ROOT/GDRIVE/VIDEO/방송중/OTT 애니메이션"),
+        Path("/ROOT/GDRIVE/VIDEO/방송중/라프텔 애니메이션"),
+        Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
+    )
+    GENRE_FROM_PATH_ROOTS = (
+        Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
+        Path("/ROOT/GDRIVE/VIDEO/방송중"),
+        Path("/ROOT/GDRIVE/VIDEO/방송중(기타)"),
+    )
+    RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
+    RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
+    MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
+    PTN_FILE_TITLES = (
+        re.compile(
+            r"^(?P<title>.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))",
+            re.IGNORECASE
+        ),
+    )
+
     def __init__(
         self,
         command_prefix: str,
@@ -73,21 +94,6 @@ class FlaskfarmaiderBot(commands.Bot):
         self.broadcast_queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self.tasks: dict[str, asyncio.Task] = dict()
         self.api_server = None
-        self.byte_size = 16
-        self.no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
-        self.OTT_PRIORITY_ROOTS = (
-            Path("/ROOT/GDRIVE/VIDEO/방송중/OTT 애니메이션"),
-            Path("/ROOT/GDRIVE/VIDEO/방송중/라프텔 애니메이션"),
-            Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
-        )
-        self.GENRE_FROM_PATH_ROOTS = (
-            Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
-            Path("/ROOT/GDRIVE/VIDEO/방송중"),
-            Path("/ROOT/GDRIVE/VIDEO/방송중(기타)"),
-        )
-        self.RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
-        self.RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
-        self.MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
 
     async def setup_hook(self):
         """override"""
@@ -250,12 +256,11 @@ class FlaskfarmaiderBot(commands.Bot):
         return "ktv", "vod"
 
     def _get_file_title(self, path: Path, parsed: dict) -> str:
-        pattern = (
-            r"^(.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))"
-        )
-        match = re.search(pattern, path.name, re.IGNORECASE)
-        if match:
-            candidate = match.group(1)
+        for pattern in self.PTN_FILE_TITLES:
+            match = pattern.search(path.name)
+            if match:
+                candidate = match.group('title')
+                break
         else:
             candidate = (parsed or {}).get("title") or ""
         return " ".join(candidate.replace(".", " ").split()).strip()
@@ -391,7 +396,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     or "",
                     "poster": metadata.get("main_poster")
                     or metadata.get("image_url")
-                    or self.no_poster,
+                    or self.NO_POSTER,
                     "title": metadata.get("title")
                     or metadata.get("title_en")
                     or "Unknown",
@@ -433,7 +438,7 @@ class FlaskfarmaiderBot(commands.Bot):
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
-            poster = self.no_poster
+            poster = self.NO_POSTER
         return {
             "t1": "bot_downloader",
             "t2": module,
@@ -520,7 +525,7 @@ class FlaskfarmaiderBot(commands.Bot):
 
     def _pad(self, text: str) -> bytes:
         text_bytes = text.encode("utf-8")
-        pad_len = self.byte_size - (len(text_bytes) % self.byte_size)
+        pad_len = AES.block_size - (len(text_bytes) % AES.block_size)
         padding = bytes([pad_len] * pad_len)
         return text_bytes + padding
 
@@ -539,10 +544,10 @@ class FlaskfarmaiderBot(commands.Bot):
 
     def decrypt(self, encoded: str, key: str) -> str:
         decoded_bytes = base64.b64decode(encoded)
-        iv = decoded_bytes[: self.byte_size]
-        if len(iv) != self.byte_size:
-            iv = os.urandom(self.byte_size)
-        encrypted_content = decoded_bytes[self.byte_size :]
+        iv = decoded_bytes[: AES.block_size]
+        if len(iv) != AES.block_size:
+            iv = os.urandom(AES.block_size)
+        encrypted_content = decoded_bytes[AES.block_size :]
         key_bytes = key.encode()
         cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
         decrypted_bytes = cipher.decrypt(encrypted_content)
