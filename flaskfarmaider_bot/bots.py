@@ -288,15 +288,20 @@ class FlaskfarmaiderBot(commands.Bot):
                             first_result = search_result[0]
                         # KTV 서치 목록
                         elif isinstance(search_result, dict):
-                            first_site = next(iter(search_result), None)
+                            if path.stem.endswith("-SW") and search_result.get("wavve"):
+                                first_site = "wavve"
+                            elif path.stem.endswith("-ST") and search_result.get(
+                                "tving"
+                            ):
+                                first_site = "tving"
+                            else:
+                                first_site = next(iter(search_result), None)
                             site = search_result[first_site] if first_site else {}
                             if not site:
                                 logger.warning(no_search_result_msg)
                                 return {}
-                            if isinstance(site, list):
-                                first_result = site[0]
-                            else:
-                                first_result = site
+
+                            first_result = site[0] if isinstance(site, list) else site
                         else:
                             logger.warning(no_search_result_msg)
                             first_result = {}
@@ -407,7 +412,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 reverse=True,
             )
             if selected := next(iter(sorted_image_list), None):
-                poster = selected.get('value') or selected.get('thumb')
+                poster = selected.get("value") or selected.get("thumb")
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
