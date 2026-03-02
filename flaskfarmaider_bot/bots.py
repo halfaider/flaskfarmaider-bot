@@ -288,12 +288,14 @@ class FlaskfarmaiderBot(commands.Bot):
                             first_result = search_result[0]
                         # KTV 서치 목록
                         elif isinstance(search_result, dict):
-                            if path.stem.endswith("-SW") and search_result.get("wavve"):
+                            has_wavve = bool(search_result.get("wavve"))
+                            has_tving = bool(search_result.get("tving"))
+                            if path.stem.endswith("-SW") and has_wavve:
                                 first_site = "wavve"
-                            elif path.stem.endswith("-ST") and search_result.get(
-                                "tving"
-                            ):
+                            elif path.stem.endswith("-ST") and has_tving:
                                 first_site = "tving"
+                            elif path.stem.endswith("-KL") and (has_wavve or has_tving):
+                                first_site = "wavve" if has_wavve else "tving"
                             else:
                                 first_site = next(iter(search_result), None)
                             site = search_result[first_site] if first_site else {}
