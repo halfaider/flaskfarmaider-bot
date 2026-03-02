@@ -75,6 +75,19 @@ class FlaskfarmaiderBot(commands.Bot):
         self.api_server = None
         self.byte_size = 16
         self.no_poster = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
+        self.OTT_PRIORITY_ROOTS = (
+            Path("/ROOT/GDRIVE/VIDEO/방송중/OTT 애니메이션"),
+            Path("/ROOT/GDRIVE/VIDEO/방송중/라프텔 애니메이션"),
+            Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
+        )
+        self.GENRE_FROM_PATH_ROOTS = (
+            Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
+            Path("/ROOT/GDRIVE/VIDEO/방송중"),
+            Path("/ROOT/GDRIVE/VIDEO/방송중(기타)"),
+        )
+        self.RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
+        self.RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
+        self.MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
 
     async def setup_hook(self):
         """override"""
@@ -228,11 +241,11 @@ class FlaskfarmaiderBot(commands.Bot):
         return f"```^{encrypted_data}```"
 
     def _get_category_and_module(self, path: Path) -> tuple[str, str]:
-        if path.is_relative_to("/ROOT/GDRIVE/VIDEO/방송중/외국"):
+        if path.is_relative_to(self.RECENT_FOREIGN_SERIES_ROOT):
             if path.stem.endswith(("-SW", "-ST")):
                 return "ktv", "vod"
             return "ftv", "vod"
-        if path.is_relative_to("/ROOT/GDRIVE/VIDEO/영화"):
+        if path.is_relative_to(self.MOVIE_ROOT):
             return "movie", "share_movie"
         return "ktv", "vod"
 
@@ -274,7 +287,6 @@ class FlaskfarmaiderBot(commands.Bot):
             api_path = f"/metadata/api/{category}/search"
             url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
             try:
-
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         search_result = await response.json()
@@ -290,19 +302,26 @@ class FlaskfarmaiderBot(commands.Bot):
                         elif isinstance(search_result, dict):
                             has_wavve = bool(search_result.get("wavve"))
                             has_tving = bool(search_result.get("tving"))
-                            if path.stem.endswith("-SW") and has_wavve:
-                                first_site = "wavve"
-                            elif path.stem.endswith("-ST") and has_tving:
-                                first_site = "tving"
-                            elif path.stem.endswith("-KL") and (has_wavve or has_tving):
-                                first_site = "wavve" if has_wavve else "tving"
-                            else:
+                            first_site = None
+                            if has_wavve or has_tving:
+                                for root in self.OTT_PRIORITY_ROOTS:
+                                    if path.is_relative_to(root):
+                                        if path.stem.endswith("-SW") and has_wavve:
+                                            first_site = "wavve"
+                                        elif path.stem.endswith("-ST") and has_tving:
+                                            first_site = "tving"
+                                        else:
+                                            first_site = (
+                                                "wavve" if has_wavve else "tving"
+                                            )
+                                        break
+                            if not first_site:
                                 first_site = next(iter(search_result), None)
                             site = search_result[first_site] if first_site else {}
                             if not site:
                                 logger.warning(no_search_result_msg)
                                 return {}
-
+                            # Daum은 dict, 나머지는 list
                             first_result = site[0] if isinstance(site, list) else site
                         else:
                             logger.warning(no_search_result_msg)
@@ -324,11 +343,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 return {}
 
     def _get_genre_from_path(self, path: Path) -> str:
-        for root in (
-            "/ROOT/GDRIVE/VIDEO/방송중/외국",
-            "/ROOT/GDRIVE/VIDEO/방송중",
-            "/ROOT/GDRIVE/VIDEO/방송중(기타)",
-        ):
+        for root in self.GENRE_FROM_PATH_ROOTS:
             try:
                 return path.relative_to(root).parts[0]
             except Exception:
@@ -349,7 +364,7 @@ class FlaskfarmaiderBot(commands.Bot):
         metadata = metadata or {}
         countries = metadata.get("country") or []
         ca = "Unknown"
-        if path.is_relative_to("/ROOT/GDRIVE/VIDEO/영화/최신"):
+        if path.is_relative_to(self.RECENT_MOVIE_ROOT):
             ca = "최신"
         elif countries:
             for korea in ("한국", "대한민국", "Korea"):
