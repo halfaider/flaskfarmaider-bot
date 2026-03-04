@@ -16,10 +16,10 @@ import aiohttp
 from discord.ext import commands
 from Crypto import Random
 from Crypto.Cipher import AES
-import PTN
 
 from .servers import FFaiderBotAPI
 from .models import AppSettings
+from .helpers.parsers import filename_parse
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +72,7 @@ class FlaskfarmaiderBot(commands.Bot):
     RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
     RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
     MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
-    PTN_FILE_TITLES = (
-        re.compile(
-            r"^(?P<title>.+?)(?=\.(?:\d{4}|S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))",
-            re.IGNORECASE
-        ),
-    )
-    PTN_TMDB_IDS = (
-        re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),
-    )
+    PTN_TMDB_IDS = (re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),)
 
     def __init__(
         self,
@@ -258,24 +250,6 @@ class FlaskfarmaiderBot(commands.Bot):
             return "movie", "share_movie"
         return "ktv", "vod"
 
-    def _get_file_title(self, path: Path, parsed: dict) -> str:
-        """
-        무엇이든 물어보세요.260304.1080p-RELEASE.mp4
-            PTN: 무엇이든 물어보세요.260304.
-            REGEX: 무엇이든 물어보세요
-        """
-        candidate = (parsed or {}).get("title") or ""
-        logger.debug(f"PTN: {candidate} ({path.name})")
-        for pattern in self.PTN_FILE_TITLES:
-            match = pattern.search(path.name)
-            if match:
-                candidate_ = match.group('title')
-                logger.debug(f"REGEX: {candidate_} ({path.name})")
-                if not candidate:
-                    candidate = candidate_
-                break
-        return " ".join(candidate.replace(".", " ").split()).strip()
-
     async def _fetch_metadata(
         self, path: Path, category: str, file_title: str, year: int
     ) -> dict[str, Any]:
@@ -286,7 +260,10 @@ class FlaskfarmaiderBot(commands.Bot):
             "manual": "True",
         }
         path_str = str(path)
-        tmdb_match = next((match for ptn in self.PTN_TMDB_IDS if (match := ptn.search(path_str))), None)
+        tmdb_match = next(
+            (match for ptn in self.PTN_TMDB_IDS if (match := ptn.search(path_str))),
+            None,
+        )
         if tmdb_match:
             code_prefix = "MT" if category == "movie" else "FT"
             query = default_query | {"code": f"{code_prefix}{tmdb_match.group(1)}"}
@@ -485,9 +462,9 @@ class FlaskfarmaiderBot(commands.Bot):
         logger.debug(f"{path=} {item=} {file_count=} {total_size=}")
         full_path = Path(path)
         category, module = self._get_category_and_module(full_path)
-        parsed_parts = PTN.parse(full_path.stem)
+        parsed_parts = filename_parse(full_path.name)
         logger.debug(f"{parsed_parts=}")
-        file_title = self._get_file_title(full_path, parsed_parts)
+        file_title = parsed_parts.get("title") or full_path.stem
         year = parsed_parts.get("year") or 1900
         metadata = await self._fetch_metadata(full_path, category, file_title, year)
         if category == "movie":
