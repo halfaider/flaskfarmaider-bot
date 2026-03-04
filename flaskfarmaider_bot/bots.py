@@ -78,6 +78,9 @@ class FlaskfarmaiderBot(commands.Bot):
             re.IGNORECASE
         ),
     )
+    PTN_TMDB_IDS = (
+        re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),
+    )
 
     def __init__(
         self,
@@ -256,13 +259,20 @@ class FlaskfarmaiderBot(commands.Bot):
         return "ktv", "vod"
 
     def _get_file_title(self, path: Path, parsed: dict) -> str:
+        """
+        무엇이든 물어보세요.260304.1080p-RELEASE.mp4
+            PTN: 무엇이든 물어보세요.260304.
+            REGEX: 무엇이든 물어보세요
+        """
         candidate = (parsed or {}).get("title") or ""
         logger.debug(f"PTN: {candidate} ({path.name})")
         for pattern in self.PTN_FILE_TITLES:
             match = pattern.search(path.name)
             if match:
-                candidate = match.group('title')
-                logger.debug(f"regex: {candidate} ({path.name})")
+                candidate_ = match.group('title')
+                logger.debug(f"REGEX: {candidate_} ({path.name})")
+                if not candidate:
+                    candidate = candidate_
                 break
         return " ".join(candidate.replace(".", " ").split()).strip()
 
@@ -275,7 +285,9 @@ class FlaskfarmaiderBot(commands.Bot):
             "call": "plex",
             "manual": "True",
         }
-        if tmdb_match := re.search(r"{tmdb-(\d+)}", str(path)):
+        path_str = str(path)
+        tmdb_match = next((match for ptn in self.PTN_TMDB_IDS if (match := ptn.search(path_str))), None)
+        if tmdb_match:
             code_prefix = "MT" if category == "movie" else "FT"
             query = default_query | {"code": f"{code_prefix}{tmdb_match.group(1)}"}
             api_path = f"/metadata/api/{'ftv' if category == 'ktv' else category}/info"
