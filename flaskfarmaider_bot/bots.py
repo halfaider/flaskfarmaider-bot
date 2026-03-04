@@ -54,6 +54,36 @@ class FlaskfarmaiderHelpCommand(commands.DefaultHelpCommand):
             f"https://github.com/halfaider/flaskfarmaider-bot"
         )
 
+    def get_command_signature(self, command: commands.Command[Any, ..., Any], /) -> str:
+        """override"""
+        parent = command.full_parent_name
+        name = f"{parent} {command.name}" if parent else command.name
+        prefix = self.context.clean_prefix
+        usage = command.usage if command.usage else command.signature
+        return f"{prefix}{name} {usage}"
+
+    def add_command_arguments(
+        self, command: commands.Command[Any, ..., Any], /
+    ) -> None:
+        """override"""
+        arguments = command.clean_params.values()
+        if not arguments:
+            return
+
+        self.paginator.add_line(self.arguments_heading)
+
+        indent = " " * self.indent
+        desc_indent = indent * 2
+
+        for argument in arguments:
+            name = argument.displayed_name or argument.name
+            description = argument.description or self.default_argument_description
+            self.paginator.add_line(f"{indent}{name}")
+            desc_entry = f"{desc_indent}└ {description}"
+            if argument.displayed_default is not None:
+                desc_entry += f" (기본값: {argument.displayed_default})"
+            self.paginator.add_line(self.shorten_text(desc_entry))
+
 
 class FlaskfarmaiderBot(commands.Bot):
     """Flaskfarm 도우미 봇"""
@@ -107,6 +137,7 @@ class FlaskfarmaiderBot(commands.Bot):
         """override"""
         logger.info(f"Logged in as {self.user}")
         await self.add_cog(GDSBroadcastCog(self))
+        await self.add_cog(DownloaderBroadcastCog(self))
         if not self.api_server:
             self.api_server = FFaiderBotAPI(self, self.settings.api)
             await self.api_server.start()
@@ -154,7 +185,7 @@ class FlaskfarmaiderBot(commands.Bot):
     ) -> None:
         """override"""
         logger.warning(
-            f'Error occurred by name="{ctx.author.name}" id={ctx.author.id} error="{str(error)}"'
+            f'Error occurred by name="{ctx.author.name}" type="{type(error)}" error="{str(error)}"'
         )
         message = None
         match type(error):
@@ -168,12 +199,19 @@ class FlaskfarmaiderBot(commands.Bot):
                 message = f"잠시 후에 시도해 주세요."
             case commands.errors.MissingRequiredArgument:
                 message = f"추가 인자를 입력해 주세요."
+            case commands.errors.BadArgument:
+                message = f"잘못된 형식의 인자가 입력됐습니다."
             case _:
                 await super().on_command_error(ctx, error)
-                return
+                message = f"오류가 발생했습니다."
         check_channels = self.settings.discord.command.checks.channels
         if not check_channels or ctx.channel.id in check_channels:
-            await ctx.send(f"{message} ```{str(error)}```")
+            await ctx.send(f"{message}\n> {str(error)}")
+            if isinstance(
+                error,
+                (commands.errors.MissingRequiredArgument, commands.errors.BadArgument),
+            ):
+                await ctx.send_help(ctx.command)
 
     async def _broadcast(self, content: str) -> None:
         for channel_id in self.settings.broadcast.target.channels:
@@ -546,11 +584,70 @@ class FlaskfarmaiderBot(commands.Bot):
         return unpadded_bytes.decode()
 
 
-class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
+class DownloaderBroadcastCog(commands.Cog, name="다운로더-방송"):
+    """봇 다운로더로 방송 명령어"""
+
+    def __init__(self, bot: FlaskfarmaiderBot) -> None:
+        self.bot: FlaskfarmaiderBot = bot
+
+    @commands.command(
+        name="downloader",
+        brief="콘텐츠를 봇 다운로더로 방송합니다.",
+    )
+    @commands.cooldown(2, 3.0, commands.BucketType.user)
+    async def broadcast_downloader(
+        self,
+        ctx: commands.Context,
+        target_str: str = commands.parameter(
+            displayed_name="GDS 경로",
+            description='"/ROOT/GDRIVE"로 시작, 공백이 있으면 따옴표로 묶으세요.',
+        ),
+        resource_id: str = commands.parameter(
+            displayed_name="리소스 ID",
+            description="파일/폴더의 구글 드라이브 ID",
+        ),
+        total_size: int = commands.parameter(
+            default=0,
+            displayed_name="총 용량",
+            description="전체 파일의 byte 용량",
+        ),
+        file_count: int = commands.parameter(
+            default=0,
+            displayed_name="파일 개수",
+            description="파일은 1, 폴더는 자식 파일의 총 개수",
+        ),
+    ) -> None:
+        """콘텐츠를 봇 다운로더로 방송합니다."""
+        logger.info(f"{target_str=} {resource_id=} {file_count=} {total_size=}")
+        target_path = Path(target_str)
+        if not target_path.is_relative_to("/ROOT/GDRIVE/"):
+            await ctx.send(f"경로가 올바른지 확인해 주세요.```{str(target_path)}```")
+            return
+        if not re.match(r"^[a-zA-Z0-9-_]{19,50}$", resource_id):
+            await ctx.send(
+                f"리소스 ID가 올바른지 확인해 주세요.```{str(resource_id)}```"
+            )
+            return
+        await self.bot.broadcast_queue.put(
+            (
+                "downloader",
+                {
+                    "path": str(target_path),
+                    "item": resource_id,
+                    "total_size": total_size,
+                    "file_count": file_count,
+                },
+            )
+        )
+        await ctx.send(
+            f"방송 대기열에 추가했습니다.```GDS 경로: {str(target_path)}\n리소스 ID: {resource_id}\n총 용량: {total_size}\n파일 개수: {file_count}```"
+        )
+
+
+class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
     """GDS 변경사항 방송 명령어"""
 
     PARAMETER_BROADCAST = commands.parameter(
-        default=None,
         displayed_name="GDS 경로",
         description='"/ROOT/GDRIVE"로 시작. "|"로 구분. /ROOT/GDRIVE/target-01|/ROOT/GDRIVE/target-02|...|/ROOT/GDRIVE/target-N',
     )
@@ -613,7 +710,6 @@ class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
         self, ctx: commands.Context, *, target_str: str = PARAMETER_BROADCAST
     ) -> None:
         """ "ADD" 모드로 GDS 변경사항을 방송합니다."""
-        pass
 
     @commands.command(
         name="rm-file", brief='"REMOVE_FILE" 모드로 GDS 변경사항을 방송합니다.'
@@ -624,7 +720,6 @@ class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
         self, ctx: commands.Context, *, target_str: str = PARAMETER_BROADCAST
     ) -> None:
         """ "REMOVE_FILE" 모드로 GDS 변경사항을 방송합니다."""
-        pass
 
     @commands.command(
         name="rm-folder", brief='"REMOVE_FOLDER" 모드로 GDS 변경사항을 방송합니다.'
@@ -635,7 +730,6 @@ class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
         self, ctx: commands.Context, *, target_str: str = PARAMETER_BROADCAST
     ) -> None:
         """ "REMOVE_FOLDER" 모드로 GDS 변경사항을 방송합니다."""
-        pass
 
     @commands.command(
         name="refresh", brief='"REFRESH" 모드로 GDS 변경사항을 방송합니다.'
@@ -646,4 +740,3 @@ class GDSBroadcastCog(commands.Cog, name="구드공-방송"):
         self, ctx: commands.Context, *, target_str: str = PARAMETER_BROADCAST
     ) -> None:
         """ "REFRESH" 모드로 GDS 변경사항을 방송합니다."""
-        pass
