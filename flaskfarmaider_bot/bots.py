@@ -347,13 +347,12 @@ class FlaskfarmaiderBot(commands.Bot):
                 logger.exception(f"Metadata fetch failed: {path=}")
                 return {}
 
-    def _get_genre_from_path(self, path: Path) -> str:
+    def _get_genre_from_path(self, path: Path) -> str | None:
         for root in self.GENRE_FROM_PATH_ROOTS:
             try:
                 return path.relative_to(root).parts[0]
             except Exception:
                 continue
-        return "Unknown"
 
     def _build_movie_data(
         self,
@@ -421,10 +420,12 @@ class FlaskfarmaiderBot(commands.Bot):
         metadata = metadata or {}
         date_match = re.search(r"\d{6}", path.stem)
         genres = metadata.get("genre")
-        if isinstance(genres, list) and genres:
+        if folder_genre := self._get_genre_from_path(path):
+            genre = folder_genre
+        elif isinstance(genres, list) and genres:
             genre = genres[0]
         else:
-            genre = genres or self._get_genre_from_path(path)
+            genre = "Unknown"
         poster = None
         image_list = metadata.get("thumb") or metadata.get("art")
         if isinstance(image_list, list):
