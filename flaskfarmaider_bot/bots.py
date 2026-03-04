@@ -74,7 +74,7 @@ class FlaskfarmaiderBot(commands.Bot):
     MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
     PTN_FILE_TITLES = (
         re.compile(
-            r"^(?P<title>.+?)(?=\.(?:S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))",
+            r"^(?P<title>.+?)(?=\.(?:\d{4}|S\d+|E\d+|\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])))",
             re.IGNORECASE
         ),
     )
@@ -256,13 +256,14 @@ class FlaskfarmaiderBot(commands.Bot):
         return "ktv", "vod"
 
     def _get_file_title(self, path: Path, parsed: dict) -> str:
+        candidate = (parsed or {}).get("title") or ""
+        logger.debug(f"PTN: {candidate} ({path.name})")
         for pattern in self.PTN_FILE_TITLES:
             match = pattern.search(path.name)
             if match:
                 candidate = match.group('title')
+                logger.debug(f"regex: {candidate} ({path.name})")
                 break
-        else:
-            candidate = (parsed or {}).get("title") or ""
         return " ".join(candidate.replace(".", " ").split()).strip()
 
     async def _fetch_metadata(
