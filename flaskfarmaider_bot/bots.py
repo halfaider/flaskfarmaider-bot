@@ -335,7 +335,6 @@ class FlaskfarmaiderBot(commands.Bot):
                         elif isinstance(search_result, dict):
                             has_wavve = bool(search_result.get("wavve"))
                             has_tving = bool(search_result.get("tving"))
-                            first_site = None
                             if has_wavve or has_tving:
                                 for root in self.OTT_PRIORITY_ROOTS:
                                     if path.is_relative_to(root):
@@ -348,12 +347,15 @@ class FlaskfarmaiderBot(commands.Bot):
                                                 "wavve" if has_wavve else "tving"
                                             )
                                         break
-                            if not first_site:
-                                first_site = next(iter(search_result), None)
+                                else:
+                                    first_site = next(iter(search_result), None)
                             site = search_result[first_site] if first_site else {}
                             if not site:
-                                logger.warning(no_search_result_msg)
-                                return {}
+                                if first_site == "daum" or not (
+                                    site := search_result.get("daum")
+                                ):
+                                    logger.warning(no_search_result_msg)
+                                    return {}
                             # Daum은 dict, 나머지는 list
                             first_result = site[0] if isinstance(site, list) else site
                         else:
