@@ -301,7 +301,7 @@ class FlaskfarmaiderBot(commands.Bot):
             code_prefix = "MT" if category == "movie" else "FT"
             return await self._lookup_metadata(f"{code_prefix}{tmdb_match.group(1)}")
         else:
-            search_result = await self._search_metadata(file_title, year)
+            search_result = await self._search_metadata(file_title, category, year)
             if not search_result:
                 logger.warning(f"No search results: {file_title=} {year=}")
                 return {}
@@ -335,8 +335,10 @@ class FlaskfarmaiderBot(commands.Bot):
                 logger.warning(f"No code: {file_title=} {first_result=}")
                 return {}
 
-    async def _search_metadata(self, keyword: str, year: int = 1900) -> dict | list:
-        for category in ("ktv", "ftv", "movie"):
+    async def _search_metadata(self, keyword: str, category: str = "ktv", year: int = 1900) -> dict | list:
+        categories = ["ktv", "ftv", "movie"]
+        categories.sort(key=lambda x: x != category)
+        for category in categories:
             api_path = f"/metadata/api/{category}/search"
             query = {
                 "apikey": self.settings.flaskfarm.apikey,
@@ -359,12 +361,16 @@ class FlaskfarmaiderBot(commands.Bot):
         return {}
 
     async def _lookup_metadata(self, code: str) -> dict:
-        if code[0] == "M":
-            category = "movie"
-        if code[0] == "F":
-            category = "ftv"
-        else:
-            category = "ktv"
+        if not isinstance(code, str) or len(code) < 1:
+            logger.warning(f"{code=}")
+            return {}
+        match code[0]:
+            case "M":
+                category = "movie"
+            case "F":
+                category = "ftv"
+            case _:
+                category = "ktv"
         api_path = f"/metadata/api/{category}/info"
         query = {
             "apikey": self.settings.flaskfarm.apikey,
