@@ -292,11 +292,6 @@ class FlaskfarmaiderBot(commands.Bot):
         self, path: Path, category: str, file_title: str, year: int
     ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=}")
-        default_query = {
-            "apikey": self.settings.flaskfarm.apikey,
-            "call": "plex",
-            "manual": "True",
-        }
         path_str = str(path)
         tmdb_match = next(
             (match for ptn in self.PTN_TMDB_IDS if (match := ptn.search(path_str))),
@@ -304,78 +299,87 @@ class FlaskfarmaiderBot(commands.Bot):
         )
         if tmdb_match:
             code_prefix = "MT" if category == "movie" else "FT"
-            query = default_query | {"code": f"{code_prefix}{tmdb_match.group(1)}"}
-            api_path = f"/metadata/api/{'ftv' if category == 'ktv' else category}/info"
-            url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as response:
-                        return await response.json() or {}
-            except Exception:
-                logger.exception(f"Metadata fetch failed: {path=}")
-                return {}
+            return await self._lookup_metadata(f"{code_prefix}{tmdb_match.group(1)}")
         else:
-            # 검색 후 첫번째 결과의 info를 return
-            query = default_query | {"keyword": file_title, "year": year}
+            search_result = await self._search_metadata(file_title, year)
+            if not search_result:
+                logger.warning(f"No search results: {file_title=} {year=}")
+                return {}
+            if isinstance(search_result, list):
+                first_result = search_result[0]
+            # KTV 서치 목록
+            elif isinstance(search_result, dict):
+                site = search_result.get("daum") or {}
+                has_wavve = bool(search_result.get("wavve"))
+                has_tving = bool(search_result.get("tving"))
+                first_site = next(iter(search_result), None)
+                if has_wavve or has_tving:
+                    for root in self.OTT_PRIORITY_ROOTS:
+                        if path.is_relative_to(root):
+                            if path.stem.endswith("-SW") and has_wavve:
+                                first_site = "wavve"
+                            elif path.stem.endswith("-ST") and has_tving:
+                                first_site = "tving"
+                            else:
+                                first_site = "wavve" if has_wavve else "tving"
+                            break
+                if first_site:
+                    site = search_result.get(first_site) or {}
+                # Daum은 dict, 나머지는 list
+                first_result = site[0] if isinstance(site, list) else site
+            else:
+                first_result = {}
+            if code := first_result.get("code"):
+                return await self._lookup_metadata(code)
+            else:
+                logger.warning(f"No code: {file_title=} {first_result=}")
+                return {}
+
+    async def _search_metadata(self, keyword: str, year: int = 1900) -> dict | list:
+        for category in ("ktv", "ftv", "movie"):
             api_path = f"/metadata/api/{category}/search"
+            query = {
+                "apikey": self.settings.flaskfarm.apikey,
+                "call": "plex",
+                "manual": "True",
+                "keyword": keyword,
+                "year": year,
+            }
             url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         search_result = await response.json()
-                        no_search_result_msg = (
-                            f"No search results: {file_title=} {search_result=}"
-                        )
-                        if not search_result:
-                            logger.warning(no_search_result_msg)
-                            return {}
-                        if isinstance(search_result, list):
-                            first_result = search_result[0]
-                        # KTV 서치 목록
-                        elif isinstance(search_result, dict):
-                            has_wavve = bool(search_result.get("wavve"))
-                            has_tving = bool(search_result.get("tving"))
-                            if has_wavve or has_tving:
-                                for root in self.OTT_PRIORITY_ROOTS:
-                                    if path.is_relative_to(root):
-                                        if path.stem.endswith("-SW") and has_wavve:
-                                            first_site = "wavve"
-                                        elif path.stem.endswith("-ST") and has_tving:
-                                            first_site = "tving"
-                                        else:
-                                            first_site = (
-                                                "wavve" if has_wavve else "tving"
-                                            )
-                                        break
-                                else:
-                                    first_site = next(iter(search_result), None)
-                            site = search_result[first_site] if first_site else {}
-                            if not site:
-                                if first_site == "daum" or not (
-                                    site := search_result.get("daum")
-                                ):
-                                    logger.warning(no_search_result_msg)
-                                    return {}
-                            # Daum은 dict, 나머지는 list
-                            first_result = site[0] if isinstance(site, list) else site
-                        else:
-                            logger.warning(no_search_result_msg)
-                            first_result = {}
-                    if code := first_result.get("code"):
-                        info_query = default_query | {"code": code}
-                        info_api_path = f"/metadata/api/{category}/info"
-                        info_url = urljoin(
-                            self.settings.flaskfarm.url,
-                            f"{info_api_path}?{urlencode(info_query)}",
-                        )
-                        async with session.get(info_url) as info_response:
-                            return await info_response.json()
-                    else:
-                        logger.warning(f"No code: {file_title=} {first_result=}")
-                        return {}
+                        if search_result:
+                            return search_result
             except Exception:
-                logger.exception(f"Metadata fetch failed: {path=}")
-                return {}
+                logger.exception(
+                    f"Metadata lookup failed: {keyword=} {category=} {year=}"
+                )
+        return {}
+
+    async def _lookup_metadata(self, code: str) -> dict:
+        if code[0] == "M":
+            category = "movie"
+        if code[0] == "F":
+            category = "ftv"
+        else:
+            category = "ktv"
+        api_path = f"/metadata/api/{category}/info"
+        query = {
+            "apikey": self.settings.flaskfarm.apikey,
+            "call": "plex",
+            "manual": "True",
+            "code": code,
+        }
+        url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    return await response.json()
+        except Exception:
+            logger.exception(f"Metadata fetching failed: {code=}")
+        return {}
 
     def _get_genre_from_path(self, path: Path) -> str | None:
         for root in self.GENRE_FROM_PATH_ROOTS:
