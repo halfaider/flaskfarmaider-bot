@@ -371,6 +371,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 category = "ftv"
             case _:
                 category = "ktv"
+        logger.debug(f"Lookup metadata: {code} {category=}")
         api_path = f"/metadata/api/{category}/info"
         query = {
             "apikey": self.settings.flaskfarm.apikey,
