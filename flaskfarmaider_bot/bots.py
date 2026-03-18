@@ -103,6 +103,7 @@ class FlaskfarmaiderBot(commands.Bot):
     RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
     MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
     PTN_TMDB_IDS = (re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),)
+    PTN_FILE_NAME_SPLIT = re.compile(r"[-~]")
 
     def __init__(
         self,
@@ -119,9 +120,12 @@ class FlaskfarmaiderBot(commands.Bot):
         self.broadcast_queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self.tasks: dict[str, asyncio.Task] = dict()
         self.api_server = None
+        self.session: aiohttp.ClientSession | None = None
 
     async def setup_hook(self):
         """override"""
+        if not self.session:
+            self.session = aiohttp.ClientSession()
         if (
             "broadcast_worker" not in self.tasks
             or self.tasks["broadcast_worker"].done()
@@ -131,16 +135,16 @@ class FlaskfarmaiderBot(commands.Bot):
             )
             self.tasks["broadcast_worker"] = task
             logger.debug("Broadcast worker task created.")
-        await super().setup_hook()
-
-    async def on_ready(self) -> None:
-        """override"""
-        logger.info(f"Logged in as {self.user}")
         await self.add_cog(GDSBroadcastCog(self))
         await self.add_cog(DownloaderBroadcastCog(self))
         if not self.api_server:
             self.api_server = FFaiderBotAPI(self, self.settings.api)
             await self.api_server.start()
+        await super().setup_hook()
+
+    async def on_ready(self) -> None:
+        """override"""
+        logger.info(f"Logged in as {self.user}")
 
     async def on_close(self) -> None:
         """override"""
@@ -148,6 +152,11 @@ class FlaskfarmaiderBot(commands.Bot):
             if not task.done():
                 task.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        await super().close()
+        if self.session:
+            await self.session.close()
+        if self.api_server:
+            await self.api_server.stop()
         await super().close()
 
     async def on_message(self, message: discord.Message) -> None:
@@ -301,7 +310,21 @@ class FlaskfarmaiderBot(commands.Bot):
             code_prefix = "MT" if category == "movie" else "FT"
             return await self._lookup_metadata(f"{code_prefix}{tmdb_match.group(1)}")
         else:
-            search_result = await self._search_metadata(file_title, category, year)
+            search_keywords = [file_title] + [
+                stripped
+                for part in self.PTN_FILE_NAME_SPLIT.split(file_title)
+                if (stripped := part.strip(" .,_-~")) and len(stripped) > 1
+            ]
+            search_categories = sorted(
+                ["ktv", "ftv", "movie"], key=lambda x: x != category
+            )
+            search_targets = (
+                (cat, kw) for cat in search_categories for kw in search_keywords
+            )
+            search_result = None
+            for cat, kw in search_targets:
+                if search_result := await self._search_metadata(kw, cat, year):
+                    break
             if not search_result:
                 logger.warning(f"No search results: {file_title=} {year=}")
                 return {}
@@ -335,29 +358,31 @@ class FlaskfarmaiderBot(commands.Bot):
                 logger.warning(f"No code: {file_title=} {first_result=}")
                 return {}
 
-    async def _search_metadata(self, keyword: str, category: str = "ktv", year: int = 1900) -> dict | list:
-        categories = ["ktv", "ftv", "movie"]
-        categories.sort(key=lambda x: x != category)
-        for category in categories:
-            api_path = f"/metadata/api/{category}/search"
-            query = {
-                "apikey": self.settings.flaskfarm.apikey,
-                "call": "plex",
-                "manual": "True",
-                "keyword": keyword,
-                "year": year,
-            }
-            url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as response:
-                        search_result = await response.json()
-                        if search_result:
-                            return search_result
-            except Exception:
-                logger.exception(
-                    f"Metadata lookup failed: {keyword=} {category=} {year=}"
-                )
+    async def _search_metadata(
+        self, keyword: str, category: str = "ktv", year: int = 1900
+    ) -> dict | list:
+        logger.debug(f"Search metadata: {keyword=} {category=}")
+        if not self.session:
+            logger.error("Session is not initialized...")
+            return {}
+        api_path = f"/metadata/api/{category}/search"
+        query = {
+            "apikey": self.settings.flaskfarm.apikey,
+            "call": "plex",
+            "manual": "True",
+            "keyword": keyword,
+            "year": year,
+        }
+        url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
+        try:
+            async with self.session.get(url) as response:
+                search_result = await response.json()
+                if search_result:
+                    return search_result
+        except Exception:
+            logger.exception(
+                f"Metadata searching failed: {keyword=} {category=} {year=}"
+            )
         return {}
 
     async def _lookup_metadata(self, code: str) -> dict:
@@ -371,7 +396,10 @@ class FlaskfarmaiderBot(commands.Bot):
                 category = "ftv"
             case _:
                 category = "ktv"
-        logger.debug(f"Lookup metadata: {code} {category=}")
+        logger.debug(f"Lookup metadata: {code=} {category=}")
+        if not self.session:
+            logger.error("Session is not initialized...")
+            return {}
         api_path = f"/metadata/api/{category}/info"
         query = {
             "apikey": self.settings.flaskfarm.apikey,
@@ -381,11 +409,10 @@ class FlaskfarmaiderBot(commands.Bot):
         }
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    return await response.json()
+            async with self.session.get(url) as response:
+                return await response.json()
         except Exception:
-            logger.exception(f"Metadata fetching failed: {code=}")
+            logger.exception(f"Metadata lookup failed: {code=}")
         return {}
 
     def _get_genre_from_path(self, path: Path) -> str | None:

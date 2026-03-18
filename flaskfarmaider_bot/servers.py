@@ -51,6 +51,8 @@ class Server:
 
     def __init__(self, settings: APIConfig) -> None:
         self.settings = settings
+        self.runner: web.AppRunner | None = None
+        self.site: web.TCPSite | None = None
         aio_logger = logging.getLogger("aiohttp.access")
         aio_logger.setLevel(logging.DEBUG)
         aio_logger.addHandler(logging.StreamHandler())
@@ -116,17 +118,28 @@ class Server:
                             f'Add route: path="{route_path}" method="{route_method_str}" auth_required={route_auth_required}'
                         )
                         route_func(route_path, method, name=method.__name__)
-        runner = web.AppRunner(
+        self.runner = web.AppRunner(
             app,
             access_log=logger,
             access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
         )
-        await runner.setup()
+        await self.runner.setup()
         host = self.settings.host or "0.0.0.0"
         port = self.settings.port or 8080
-        site = web.TCPSite(runner, host=host, port=port)
-        await site.start()
+        self.site = web.TCPSite(self.runner, host=host, port=port)
+        await self.site.start()
         logger.info(f"Listen on http://{host}:{port}")
+
+    async def stop(self) -> None:
+        if self.site:
+            logger.info("Stopping the site...")
+            await self.site.stop()
+            self.site = None
+        if self.runner:
+            logger.info("Cleaning up AppRunner...")
+            await self.runner.cleanup()
+            self.runner = None
+        logger.info("Server stopped successfully...")
 
     @route("/", "GET", False)
     async def index(self, request: web.Request) -> web.Response:
