@@ -100,7 +100,6 @@ class FlaskfarmaiderBot(commands.Bot):
         Path("/ROOT/GDRIVE/VIDEO/방송중(기타)"),
     )
     RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
-    RECENT_FOREIGN_SERIES_ROOT = Path("/ROOT/GDRIVE/VIDEO/방송중/외국")
     MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
     PTN_TMDB_IDS = (re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),)
     PTN_FILE_NAME_SPLIT = re.compile(r"[-~]")
@@ -289,10 +288,11 @@ class FlaskfarmaiderBot(commands.Bot):
         return f"```^{encrypted_data}```"
 
     def _get_category_and_module(self, path: Path) -> tuple[str, str]:
-        if path.is_relative_to(self.RECENT_FOREIGN_SERIES_ROOT):
-            if path.stem.endswith(("-SW", "-ST")):
-                return "ktv", "vod"
-            return "ftv", "vod"
+        if path.stem.endswith(("-SW", "-ST")):
+            return "ktv", "vod"
+        for root in self.OTT_PRIORITY_ROOTS:
+            if path.is_relative_to(root):
+                return "ftv", "vod"
         if path.is_relative_to(self.MOVIE_ROOT):
             return "movie", "share_movie"
         return "ktv", "vod"
@@ -316,7 +316,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 if (stripped := part.strip(" .,_-~")) and len(stripped) > 1
             ]
             search_categories = sorted(
-                ["ktv", "ftv", "movie"], key=lambda x: x != category
+                ["ftv", "ktv", "movie"], key=lambda x: x != category
             )
             search_targets = (
                 (cat, kw) for cat in search_categories for kw in search_keywords
