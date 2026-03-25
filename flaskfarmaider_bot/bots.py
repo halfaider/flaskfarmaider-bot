@@ -367,7 +367,6 @@ class FlaskfarmaiderBot(commands.Bot):
             return {}
         api_path = f"/metadata/api/{category}/search"
         query = {
-            "apikey": self.settings.flaskfarm.apikey,
             "call": "plex",
             "manual": "True",
             "keyword": keyword,
@@ -375,7 +374,7 @@ class FlaskfarmaiderBot(commands.Bot):
         }
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
-            async with self.session.get(url) as response:
+            async with self.session.post(url, data={'apikey': self.settings.flaskfarm.apikey}) as response:
                 search_result = await response.json()
                 if search_result:
                     return search_result
@@ -402,14 +401,13 @@ class FlaskfarmaiderBot(commands.Bot):
             return {}
         api_path = f"/metadata/api/{category}/info"
         query = {
-            "apikey": self.settings.flaskfarm.apikey,
             "call": "plex",
             "manual": "True",
             "code": code,
         }
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
-            async with self.session.get(url) as response:
+            async with self.session.post(url, data={'apikey': self.settings.flaskfarm.apikey}) as response:
                 return await response.json()
         except Exception:
             logger.exception(f"Metadata lookup failed: {code=}")
