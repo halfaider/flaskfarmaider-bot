@@ -88,22 +88,6 @@ class FlaskfarmaiderHelpCommand(commands.DefaultHelpCommand):
 class FlaskfarmaiderBot(commands.Bot):
     """Flaskfarm 도우미 봇"""
 
-    NO_POSTER = "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
-    OTT_PRIORITY_ROOTS = (
-        Path("/ROOT/GDRIVE/VIDEO/방송중/OTT 애니메이션"),
-        Path("/ROOT/GDRIVE/VIDEO/방송중/라프텔 애니메이션"),
-        Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
-    )
-    GENRE_FROM_PATH_ROOTS = (
-        Path("/ROOT/GDRIVE/VIDEO/방송중/외국"),
-        Path("/ROOT/GDRIVE/VIDEO/방송중"),
-        Path("/ROOT/GDRIVE/VIDEO/방송중(기타)"),
-    )
-    RECENT_MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화/최신")
-    MOVIE_ROOT = Path("/ROOT/GDRIVE/VIDEO/영화")
-    PTN_TMDB_IDS = (re.compile(r"{tmdb-(\d+)}", re.IGNORECASE),)
-    PTN_FILE_NAME_SPLIT = re.compile(r"[-~]")
-
     def __init__(
         self,
         command_prefix: str,
@@ -287,14 +271,13 @@ class FlaskfarmaiderBot(commands.Bot):
         )
         return f"```^{encrypted_data}```"
 
-    def _get_category_and_module(self, path: Path) -> tuple[str, str]:
-        if path.stem.endswith(("-SW", "-ST")):
-            return "ktv", "vod"
-        for root in self.OTT_PRIORITY_ROOTS:
-            if path.is_relative_to(root):
-                return "ftv", "vod"
-        if path.is_relative_to(self.MOVIE_ROOT):
-            return "movie", "share_movie"
+    def _get_category_and_module(self, full_path: Path) -> tuple[str, str]:
+        for mod_rule in self.settings.broadcast.module_rules:
+            if mod_rule.is_match(str(full_path)) or mod_rule.is_relative(full_path):
+                logger.debug(
+                    f"Matched modules: metadata='{mod_rule.metadata}' bot_downloader='{mod_rule.bot_downloader}' path='{str(full_path)}'"
+                )
+                return mod_rule.metadata, mod_rule.bot_downloader
         return "ktv", "vod"
 
     async def _fetch_metadata(
@@ -302,19 +285,11 @@ class FlaskfarmaiderBot(commands.Bot):
     ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=}")
         path_str = str(path)
-        tmdb_match = next(
-            (match for ptn in self.PTN_TMDB_IDS if (match := ptn.search(path_str))),
-            None,
-        )
-        if tmdb_match:
+        if tmdb_id := self.settings.tmdb.get_tmdb_id(path_str):
             code_prefix = "MT" if category == "movie" else "FT"
-            return await self._lookup_metadata(f"{code_prefix}{tmdb_match.group(1)}")
+            return await self._lookup_metadata(f"{code_prefix}{tmdb_id}")
         else:
-            search_keywords = [file_title] + [
-                stripped
-                for part in self.PTN_FILE_NAME_SPLIT.split(file_title)
-                if (stripped := part.strip(" .,_-~")) and len(stripped) > 1
-            ]
+            search_keywords = self.settings.broadcast.get_search_keywords(file_title)
             search_categories = sorted(
                 ["ftv", "ktv", "movie"], key=lambda x: x != category
             )
@@ -337,15 +312,13 @@ class FlaskfarmaiderBot(commands.Bot):
                 has_tving = bool(search_result.get("tving"))
                 first_site = next(iter(search_result), None)
                 if has_wavve or has_tving:
-                    for root in self.OTT_PRIORITY_ROOTS:
-                        if path.is_relative_to(root):
-                            if path.stem.endswith("-SW") and has_wavve:
-                                first_site = "wavve"
-                            elif path.stem.endswith("-ST") and has_tving:
-                                first_site = "tving"
-                            else:
-                                first_site = "wavve" if has_wavve else "tving"
-                            break
+                    if self.settings.broadcast.is_relative_ott(path):
+                        if path.stem.endswith("-SW") and has_wavve:
+                            first_site = "wavve"
+                        elif path.stem.endswith("-ST") and has_tving:
+                            first_site = "tving"
+                        else:
+                            first_site = "wavve" if has_wavve else "tving"
                 if first_site:
                     site = search_result.get(first_site) or {}
                 # Daum은 dict, 나머지는 list
@@ -374,7 +347,9 @@ class FlaskfarmaiderBot(commands.Bot):
         }
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
-            async with self.session.post(url, data={'apikey': self.settings.flaskfarm.apikey}) as response:
+            async with self.session.post(
+                url, data={"apikey": self.settings.flaskfarm.apikey}
+            ) as response:
                 search_result = await response.json()
                 if search_result:
                     return search_result
@@ -407,18 +382,13 @@ class FlaskfarmaiderBot(commands.Bot):
         }
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
-            async with self.session.post(url, data={'apikey': self.settings.flaskfarm.apikey}) as response:
+            async with self.session.post(
+                url, data={"apikey": self.settings.flaskfarm.apikey}
+            ) as response:
                 return await response.json()
         except Exception:
             logger.exception(f"Metadata lookup failed: {code=}")
         return {}
-
-    def _get_genre_from_path(self, path: Path) -> str | None:
-        for root in self.GENRE_FROM_PATH_ROOTS:
-            try:
-                return path.relative_to(root).parts[0]
-            except Exception:
-                continue
 
     def _build_movie_data(
         self,
@@ -434,7 +404,7 @@ class FlaskfarmaiderBot(commands.Bot):
         metadata = metadata or {}
         countries = metadata.get("country") or []
         ca = "Unknown"
-        if path.is_relative_to(self.RECENT_MOVIE_ROOT):
+        if self.settings.broadcast.get_genre_from_subfolder(path) == "최신":
             ca = "최신"
         elif countries:
             for korea in ("한국", "대한민국", "Korea"):
@@ -461,7 +431,7 @@ class FlaskfarmaiderBot(commands.Bot):
                     or "",
                     "poster": metadata.get("main_poster")
                     or metadata.get("image_url")
-                    or self.NO_POSTER,
+                    or self.settings.images.no_poster,
                     "title": metadata.get("title")
                     or metadata.get("title_en")
                     or "Unknown",
@@ -486,7 +456,7 @@ class FlaskfarmaiderBot(commands.Bot):
         metadata = metadata or {}
         date_match = re.search(r"\d{6}", path.stem)
         genres = metadata.get("genre")
-        if folder_genre := self._get_genre_from_path(path):
+        if folder_genre := self.settings.broadcast.get_genre_from_subfolder(path):
             genre = folder_genre
         elif isinstance(genres, list) and genres:
             genre = genres[0]
@@ -505,7 +475,7 @@ class FlaskfarmaiderBot(commands.Bot):
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
-            poster = self.NO_POSTER
+            poster = self.settings.images.no_poster
         return {
             "t1": "bot_downloader",
             "t2": module,

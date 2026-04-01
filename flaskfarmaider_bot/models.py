@@ -1,7 +1,9 @@
+import re
 import logging
+from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, PrivateAttr
 
 from .helpers.models import _BaseSettings
 
@@ -42,10 +44,129 @@ class BraodcastEncryptConfig(BaseModel):
     key: str = ""
 
 
+class ModuleRuleConfig(BaseModel):
+    metadata: str
+    bot_downloader: str
+    patterns: tuple[str, ...] = ()
+    roots: tuple[str, ...] = ()
+
+    _compiled_patterns: tuple[re.Pattern, ...] = PrivateAttr(default_factory=tuple)
+    _path_roots: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
+
+    @property
+    def compiled_patterns(self) -> tuple[re.Pattern, ...]:
+        return self._compiled_patterns
+
+    @property
+    def path_roots(self) -> tuple[Path, ...]:
+        return self._path_roots
+
+    def model_post_init(self, context: Any, /) -> None:
+        self._compiled_patterns = tuple(
+            re.compile(p, re.IGNORECASE) for p in self.patterns
+        )
+        self._path_roots = tuple(Path(r) for r in self.roots)
+
+    def is_match(self, full_path: str) -> bool:
+        return any(p.search(full_path) for p in self._compiled_patterns)
+
+    def is_relative(self, full_path: Path) -> bool:
+        return any(full_path.is_relative_to(root) for root in self._path_roots)
+
+
+class ImageConfig(BaseModel):
+    no_poster: str = ""
+
+
+class TmdbConfig(BaseModel):
+    id_patterns: tuple[str, ...] = ()
+
+    _compiled_id_patterns: tuple[re.Pattern, ...] = PrivateAttr(default_factory=tuple)
+
+    @property
+    def compiled_id_patterns(self) -> tuple[re.Pattern, ...]:
+        return self._compiled_id_patterns
+
+    def model_post_init(self, context: Any, /) -> None:
+        self._compiled_id_patterns = tuple(
+            re.compile(p, re.IGNORECASE) for p in self.id_patterns
+        )
+
+    def get_tmdb_id(self, full_path: str) -> str | None:
+        for ptn in self._compiled_id_patterns:
+            if match := ptn.search(full_path):
+                try:
+                    return match.group("id")
+                except IndexError:
+                    return match.group(1) if match.groups() else None
+
+
 class BroadcastConfig(BaseModel):
     source: BroadcastSourceConfig
     target: DiscordChannelsConfig
     encrypt: BraodcastEncryptConfig
+
+    module_rules: tuple[ModuleRuleConfig, ...] = ()
+    genre_by_subfolders: tuple[str, ...] = ()
+    ott_metadata_roots: tuple[str, ...] = ()
+    title_patterns: tuple[str, ...] = ()
+
+    _path_genre_by_subfolders: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
+    _path_ott_metadata_roots: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
+    _compiled_title_patterns: tuple[re.Pattern, ...] = PrivateAttr(
+        default_factory=tuple
+    )
+
+    @property
+    def path_genre_by_subfolders(self) -> tuple[Path, ...]:
+        return self._path_genre_by_subfolders
+
+    @property
+    def path_ott_metadata_roots(self) -> tuple[Path, ...]:
+        return self._path_ott_metadata_roots
+
+    @property
+    def compiled_title_patterns(self) -> tuple[re.Pattern, ...]:
+        return self._compiled_title_patterns
+
+    def model_post_init(self, context: Any, /) -> None:
+        self._path_ott_metadata_roots = tuple(Path(r) for r in self.ott_metadata_roots)
+        self._path_genre_by_subfolders = tuple(
+            Path(r) for r in self.genre_by_subfolders
+        )
+        self._compiled_title_patterns = tuple(
+            re.compile(p, re.IGNORECASE) for p in self.title_patterns
+        )
+
+    def is_relative_ott(self, full_path: Path) -> bool:
+        return any(
+            full_path.is_relative_to(root) for root in self._path_ott_metadata_roots
+        )
+
+    def is_relative_genre(self, full_path: Path) -> bool:
+        return any(
+            full_path.is_relative_to(root) for root in self._path_genre_by_subfolders
+        )
+
+    def get_genre_from_subfolder(self, full_path: Path) -> str | None:
+        for root in self._path_genre_by_subfolders:
+            try:
+                return full_path.relative_to(root).parts[0]
+            except Exception:
+                pass
+
+    def get_search_keywords(self, filename: str) -> list[str]:
+        keywords = [filename]
+        for ptn in self._compiled_title_patterns:
+            if match := ptn.search(filename):
+                try:
+                    val = match.group("title")
+                except IndexError:
+                    val = match.group(1) if match.groups() else None
+                if val and (val := val.strip()):
+                    if val not in keywords:
+                        keywords.append(val)
+        return list(dict.fromkeys(keywords))
 
 
 class APIConfig(BaseModel):
@@ -68,7 +189,9 @@ class AppSettings(_BaseSettings):
     broadcast: BroadcastConfig
     api: APIConfig
     flaskfarm: FlaskfarmServer
-    logging: LoggingConfig = LoggingConfig()
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    images: ImageConfig = Field(default_factory=ImageConfig)
+    tmdb: TmdbConfig = Field(default_factory=TmdbConfig)
 
     def model_post_init(self, context: Any, /) -> None:
         """override"""

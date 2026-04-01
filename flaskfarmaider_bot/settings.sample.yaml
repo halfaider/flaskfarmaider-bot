@@ -29,7 +29,7 @@ broadcast:
   #   - curl -v "http://localhost:8080/api/broadcast?apikey=bot-api-key" -d 'path=/ROOT/GDRIVE/THIS/IS/A/TEST' -d 'mode=REFRESH'
   source:
     # 채널 ID와 저자(웹훅) ID가 일치하고 메시지가 방송용 콘텐츠(```암호화된 문자열```)일 경우 방송
-    # 봇 API로 입력할 경우 설정할 필요 없음
+    # 봇 API로 방송할 경 경우 설정할 필요 없음
     #channels:
     #  - xxxxxxxxxxxxxxxxxxx # 봇이 듣고 있을 채널 ID
     #authors:
@@ -41,6 +41,37 @@ broadcast:
   encrypt:
     # Flaskfarm의 support.base.aes 에서 사용하는 key
     key: 140bxxxxxxxxxxxxxxxxxxxxxxxx7e14
+  module_rules:
+    # 각 파일당 적용될 플러그인의 모듈 설정
+    # 파일의 전체 경로가 patterns의 정규표현식과 매치되거나 roots 경로의 하위경로이면
+    # metadata, bot_downloader 플러그인에서 각각 설정한 모듈을 사용
+    # 가장 먼저 통과하는 규칙의 설정을 따름
+    - metadata: ktv
+      bot_downloader: vod
+      patterns: ['-SW\.', '-ST\.']
+    - metadata: movie
+      bot_downloader: share_movie
+      roots:
+        - '/ROOT/GDRIVE/...'
+    - metadata: ftv
+      bot_downloader: vod
+      roots:
+        - '/ROOT/GDRIVE/...'
+    - metadata: ktv
+      bot_downloader: vod
+      patterns: ['.*']
+  genre_by_subfolders:
+    # 이 경로의 파일들은 지정된 경로의 첫번째 하위 폴더명을 장르로 사용
+    - "/ROOT/GDRIVE/.../영화"
+  ott_metadata_roots:
+    # 이 경로의 파일들은 ott 메타데이터를 우선 사용
+    - '/ROOT/GDRIVE/...'
+  title_patterns:
+    # 기본 파일명으로 검색되지 않을 경우를 대비한 타이틀 정규표현식
+    - '^[\[\(].+[\]\)]\s(?P<title>.*?)(?:\s*[\(\[].*[\]\)])?$'
+    - '^.+?[-~](?P<title>.+?)[-~]'
+    - '^[^\w\s\(\[](?P<title>.+?)[^\w\s\)\]]'
+    - '^(?P<title>.+?)(?:\s*\(\d{4}\))?$'
 api:
   # api 설정
   # POST, http://0.0.0.0:8080/api/broadcast
@@ -59,3 +90,10 @@ flaskfarm:
   # flaskfarm 서버
   url: 'http://flaskfarm:9999'
   apikey: 1234567890
+tmdb:
+  # 경로상의 tmdb ID 정규표현식
+  id_patterns:
+    - '{tmdb-(?P<id>\d+)}'
+images:
+  # 포스터가 없을 경우 사용할 이미지
+  no_poster: "https://dummyimage.com/200x300/000/fff.jpg&text=No+Image"
