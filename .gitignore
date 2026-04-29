@@ -1,16 +1,16 @@
 *
+
+# 허용 폴더
 !flaskfarmaider_bot/
-!flaskfarmaider_bot/helpers/
-!__init__.py
-!bots.py
-!cli.py
-!main.py
-!models.py
-!servers.py
-!settings.sample.yaml
+
+# 화이트 리스트
+!flaskfarmaider_bot/**
 !.gitignore
-!.gitmodules
+!app.py
 !pyproject.toml
 !README.md
 !requirements.txt
-!protocols.py
+
+# 블랙 리스트
+**/__pycache__
+*.pyc
