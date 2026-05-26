@@ -84,6 +84,11 @@ class FlaskfarmaiderHelpCommand(commands.DefaultHelpCommand):
                 desc_entry += f" (기본값: {argument.displayed_default})"
             self.paginator.add_line(self.shorten_text(desc_entry))
 
+    async def send_pages(self) -> None:
+        """override"""
+        for page in self.paginator.pages:
+            await self.context.reply(page)
+
 
 class FlaskfarmaiderBot(commands.Bot):
     """Flaskfarm 도우미 봇"""
@@ -198,7 +203,7 @@ class FlaskfarmaiderBot(commands.Bot):
                 message = f"오류가 발생했습니다."
         check_channels = self.settings.discord.command.checks.channels
         if not check_channels or ctx.channel.id in check_channels:
-            await ctx.send(f"{message}\n> {str(error)}")
+            await ctx.reply(f"{message}\n> {str(error)}")
             if isinstance(
                 error,
                 (commands.errors.MissingRequiredArgument, commands.errors.BadArgument),
@@ -629,10 +634,10 @@ class DownloaderBroadcastCog(commands.Cog, name="다운로더-방송"):
         logger.info(f"{target_str=} {resource_id=} {file_count=} {total_size=}")
         target_path = Path(target_str)
         if not target_path.is_relative_to("/ROOT/GDRIVE/"):
-            await ctx.send(f"경로가 올바른지 확인해 주세요.```{str(target_path)}```")
+            await ctx.reply(f"경로가 올바른지 확인해 주세요.```{str(target_path)}```")
             return
         if not re.match(r"^[a-zA-Z0-9-_]{19,50}$", resource_id):
-            await ctx.send(
+            await ctx.reply(
                 f"리소스 ID가 올바른지 확인해 주세요.```{str(resource_id)}```"
             )
             return
@@ -647,7 +652,7 @@ class DownloaderBroadcastCog(commands.Cog, name="다운로더-방송"):
                 },
             )
         )
-        await ctx.send(
+        await ctx.reply(
             f"방송 대기열에 추가했습니다.```GDS 경로: {str(target_path)}\n리소스 ID: {resource_id}\n총 용량: {total_size}\n파일 개수: {file_count}```"
         )
 
@@ -670,7 +675,7 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
                 self: "GDSBroadcastCog", ctx: commands.Context, *, target_str: str
             ) -> None:
                 if not target_str:
-                    await ctx.send("경로를 입력해 주세요.")
+                    await ctx.reply("경로를 입력해 주세요.")
                     return
                 targets = [
                     tar
@@ -678,7 +683,7 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
                     if tar
                 ]
                 if not targets:
-                    await ctx.send("경로를 인식할 수 없습니다.")
+                    await ctx.reply("경로를 인식할 수 없습니다.")
                     return
                 invalid_paths = list()
                 valid_paths = list()
@@ -700,12 +705,12 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
                         invalid_paths.append(target)
                 if invalid_paths:
                     invalid_msg = "\n".join(invalid_paths)
-                    await ctx.send(
+                    await ctx.reply(
                         f"경로 및 파일 형식을 확인해 주세요.```{invalid_msg}```"
                     )
                 if valid_paths:
                     valid_msg = "\n".join(valid_paths)
-                    await ctx.send(f"방송 대기열에 추가했습니다.```{valid_msg}```")
+                    await ctx.reply(f"방송 대기열에 추가했습니다.```{valid_msg}```")
 
             return wrapper
 
