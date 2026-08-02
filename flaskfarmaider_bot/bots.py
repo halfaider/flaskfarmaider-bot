@@ -308,26 +308,36 @@ class FlaskfarmaiderBot(commands.Bot):
             if not search_result:
                 logger.warning(f"No search results: {file_title=} {year=}")
                 return {}
-            if isinstance(search_result, list):
+            if isinstance(search_result, list) and search_result:
                 first_result = search_result[0]
             # KTV 서치 목록
             elif isinstance(search_result, dict):
-                site = search_result.get("daum") or {}
-                has_wavve = bool(search_result.get("wavve"))
-                has_tving = bool(search_result.get("tving"))
-                first_site = next(iter(search_result), None)
-                if has_wavve or has_tving:
-                    if self.settings.broadcast.is_relative_ott(path):
-                        if path.stem.endswith("-SW") and has_wavve:
-                            first_site = "wavve"
-                        elif path.stem.endswith("-ST") and has_tving:
-                            first_site = "tving"
-                        else:
-                            first_site = "wavve" if has_wavve else "tving"
-                if first_site:
-                    site = search_result.get(first_site) or {}
+                default_site = search_result.get("daum") or {}
+                if self.settings.broadcast.is_relative_ott(path):
+                    if path.stem.endswith("-SW"):
+                        ott_site = "wavve"
+                    elif path.stem.endswith("-ST"):
+                        ott_site = "tving"
+                    else:
+                        ott_site = None
+                    if ott_site and (ott_result := search_result.get(ott_site)):
+                        logger.info(f"Relative site: {ott_site}")
+                        default_site = ott_result
+                
+                # fallback
+                if not default_site:
+                    for result in search_result.values():
+                        if result:
+                            default_site = result
+                            break
+
                 # Daum은 dict, 나머지는 list
-                first_result = site[0] if isinstance(site, list) else site
+                if isinstance(default_site, list) and default_site:
+                    first_result = default_site[0]
+                elif isinstance(default_site, dict):
+                    first_result = default_site
+                else:
+                    first_result = {}
             else:
                 first_result = {}
             if code := first_result.get("code"):
