@@ -97,11 +97,12 @@ class FlaskfarmaiderBot(commands.Bot):
         self,
         command_prefix: str,
         settings: AppSettings,
-        checks: list[Callable],
+        checks: tuple[Callable, ...] | None = None,
         **kwds: Any,
     ) -> None:
         super(FlaskfarmaiderBot, self).__init__(command_prefix, **kwds)
         self.settings = settings
+        checks = checks or ()
         for check in checks:
             self.add_check(check)
         self.help_command = FlaskfarmaiderHelpCommand(command_attrs={"checks": checks})
@@ -125,6 +126,7 @@ class FlaskfarmaiderBot(commands.Bot):
             logger.debug("Broadcast worker task created.")
         await self.add_cog(GDSBroadcastCog(self))
         await self.add_cog(DownloaderBroadcastCog(self))
+        await self.add_cog(AdminCog(self))
         if not self.api_server:
             self.api_server = FFaiderBotAPI(self, self.settings.api)
             await self.api_server.start()
@@ -156,6 +158,10 @@ class FlaskfarmaiderBot(commands.Bot):
             and message.content.endswith("```")
         ):
             await self._broadcast(message.content)
+        elif message.channel.id in self.settings.broadcast.relay:
+            for target in self.settings.broadcast.relay[message.channel.id]:
+                if target.compiled_pattern and target.compiled_pattern.match(message.content):
+                    await self._relay(message.content, target.to)
         else:
             await self.process_commands(message)
 
@@ -184,14 +190,17 @@ class FlaskfarmaiderBot(commands.Bot):
         logger.warning(
             f'Error occurred by name="{ctx.author.name}" type="{type(error)}" error="{str(error)}"'
         )
+        if isinstance(
+            error,
+            (
+                commands.errors.CheckFailure,
+                commands.errors.CheckAnyFailure,
+                commands.errors.CommandNotFound,
+            ),
+        ):
+            return
         message = None
         match type(error):
-            case (
-                commands.errors.CheckFailure
-                | commands.errors.CheckAnyFailure
-                | commands.errors.CommandNotFound
-            ):
-                message = f"명령을 실행할 수 없습니다."
             case commands.errors.CommandOnCooldown:
                 message = f"잠시 후에 시도해 주세요."
             case commands.errors.MissingRequiredArgument:
@@ -201,43 +210,49 @@ class FlaskfarmaiderBot(commands.Bot):
             case _:
                 await super().on_command_error(ctx, error)
                 message = f"오류가 발생했습니다."
-        check_channels = self.settings.discord.command.checks.channels
-        if not check_channels or ctx.channel.id in check_channels:
-            await ctx.reply(f"{message}\n> {str(error)}")
-            if isinstance(
-                error,
-                (commands.errors.MissingRequiredArgument, commands.errors.BadArgument),
-            ):
-                await ctx.send_help(ctx.command)
+        await ctx.reply(f"{message}\n> {str(error)}")
+        if isinstance(
+            error,
+            (commands.errors.MissingRequiredArgument, commands.errors.BadArgument),
+        ):
+            await ctx.send_help(ctx.command)
+
+    async def _send_to_channel(self, content: str, channel_id: int) -> bool:
+        target_ch = self.get_channel(channel_id)
+        if not target_ch:
+            logger.warning(f"Channel {channel_id} not found.")
+            return False
+        if not isinstance(target_ch, discord.abc.Messageable):
+            logger.warning(f"Channel {channel_id} is not messageable.")
+            return False
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await target_ch.send(content)
+                return True
+            except discord.errors.DiscordServerError as e:
+                logger.error(
+                    f"Failed to send message to {channel_id} ({attempt + 1}/{max_retries}): {e}"
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
+                else:
+                    logger.error(f"Maximum retry count exceeded for {channel_id}.")
+            except Exception:
+                logger.exception(
+                    f"An unexpected error occurred while sending to {channel_id}: {content=}"
+                )
+                return False
+        return False
+
+    async def _relay(self, content: str, channel_id: int) -> None:
+        logger.debug(f"Relay to {channel_id}")
+        await self._send_to_channel(content, channel_id)
 
     async def _broadcast(self, content: str) -> None:
         for channel_id in self.settings.broadcast.target.channels:
-            target_ch = self.get_channel(channel_id)
-            if not target_ch:
-                logger.warning(f"Channel {channel_id} not found.")
-                continue
-            if not isinstance(target_ch, discord.abc.Messageable):
-                logger.warning(f"Channel {channel_id} is not messageable.")
-                continue
             logger.debug(f"Broadcast to {channel_id}")
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    await target_ch.send(content)
-                    break
-                except discord.errors.DiscordServerError as e:
-                    logger.error(
-                        f"Failed to send the message ({attempt + 1} / {max_retries}): {e}"
-                    )
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(5)
-                    else:
-                        logger.error(f"Maximum retry count exceeded for {channel_id}.")
-                except Exception:
-                    logger.exception(
-                        f"An unexpected error occurred while sendig to {channel_id}: {content=}"
-                    )
-                    break
+            await self._send_to_channel(content, channel_id)
 
     async def broadcast_gds(
         self, path: str, mode: str, file_count: int = 0, total_size: int = 0
@@ -613,6 +628,13 @@ class DownloaderBroadcastCog(commands.Cog, name="다운로더-방송"):
     def __init__(self, bot: FlaskfarmaiderBot) -> None:
         self.bot: FlaskfarmaiderBot = bot
 
+    async def cog_check(self, ctx: commands.Context) -> bool:
+        """다운로더 방송 명령어 실행 채널 검증"""
+        allowed = self.bot.settings.discord.command.broadcast.channels
+        if not allowed or ctx.channel.id in allowed:
+            return True
+        return False
+
     @commands.command(
         name="downloader",
         brief="콘텐츠를 봇 다운로더로 방송합니다.",
@@ -677,6 +699,13 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
 
     def __init__(self, bot: FlaskfarmaiderBot) -> None:
         self.bot: FlaskfarmaiderBot = bot
+
+    async def cog_check(self, ctx: commands.Context) -> bool:
+        """GDS 방송 명령어 실행 채널 검증"""
+        allowed = self.bot.settings.discord.command.broadcast.channels
+        if not allowed or ctx.channel.id in allowed:
+            return True
+        return False
 
     def broadcast(*, mode: str = "ADD") -> Callable:
         def decorator(class_method: Callable) -> Callable:
@@ -763,3 +792,124 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
         self, ctx: commands.Context, *, target_str: str = PARAMETER_BROADCAST
     ) -> None:
         """ "REFRESH" 모드로 GDS 변경사항을 방송합니다."""
+
+
+class AdminCog(commands.Cog, name="관리"):
+    """서버 관리 명령어"""
+
+    def __init__(self, bot: FlaskfarmaiderBot) -> None:
+        self.bot = bot
+
+    async def cog_check(self, ctx: commands.Context) -> bool:
+        """AdminCog 명령어 실행 채널 검증"""
+        allowed = self.bot.settings.discord.command.admin.channels
+        if not allowed or ctx.channel.id in allowed:
+            return True
+        return False
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        if not member.bot:
+            return
+        config = self.bot.settings.discord.auto_roles.get(member.guild.id)
+        if not config or not config.roles:
+            return
+        if config.compiled_pattern and not config.compiled_pattern.match(member.name):
+            logger.debug(
+                f"`{member.name}` does not match auto_roles pattern `{config.pattern}` in {member.guild.name}."
+            )
+            return
+        guild = member.guild
+        assigned_roles: list[discord.Role] = []
+        for role_id in config.roles:
+            role = guild.get_role(role_id)
+            if not role:
+                logger.warning(f"Role {role_id} not found in {guild.name}.")
+                continue
+            if role >= guild.me.top_role:
+                logger.warning(f"Role `{role.name}` is higher than bot's top role in {guild.name}.")
+                continue
+            if role in member.roles:
+                logger.debug(f"`{member.display_name}` already has `{role.name}`.")
+                continue
+            try:
+                await member.add_roles(role, reason="Auto-promote on join")
+                assigned_roles.append(role)
+                logger.info(f"Auto-promoted `{member.display_name}` with `{role.name}` in {guild.name}.")
+            except Exception:
+                logger.exception(f"Failed to auto-promote `{member.display_name}` with role {role_id}.")
+
+        if assigned_roles and config.channel:
+            roles_str = ", ".join(f"`{r.name}`" for r in assigned_roles)
+            message = f"`{member.display_name}` ({member.id})에게 {roles_str} 역할을 부여했습니다."
+            await self.bot._send_to_channel(message, config.channel)
+
+    def _find_bot_member(
+        self, guild: discord.Guild, query: str
+    ) -> discord.Member | None:
+        """ID, 멘션, 봇 이름(username), 별명(nickname)으로 봇(앱) 멤버를 검색합니다."""
+        cleaned = query.strip("<@!>")
+        if cleaned.isdigit():
+            if (member := guild.get_member(int(cleaned))) and member.bot:
+                return member
+
+        query_lower = query.lower()
+        # 1. 정확한 이름 또는 별명 일치 (봇만 대상, 대소문자 무시)
+        for member in guild.members:
+            if not member.bot:
+                continue
+            if (
+                member.name.lower() == query_lower
+                or member.display_name.lower() == query_lower
+            ):
+                return member
+
+        # 2. 이름 또는 별명 접두사 일치 (봇만 대상)
+        for member in guild.members:
+            if not member.bot:
+                continue
+            if member.name.lower().startswith(
+                query_lower
+            ) or member.display_name.lower().startswith(query_lower):
+                return member
+
+        return None
+
+    @commands.command(name="roles", aliases=["app-roles", "bot-roles"], brief="대상 앱(봇)의 현재 역할 목록을 조회합니다.")
+    @commands.cooldown(2, 3.0, commands.BucketType.user)
+    async def show_roles(
+        self,
+        ctx: commands.Context,
+        target: str = commands.parameter(
+            displayed_name="앱 ID 또는 이름",
+            description="역할을 조회할 대상 앱(봇)의 ID, 이름 또는 멘션",
+        ),
+    ) -> None:
+        """대상 앱(봇)의 현재 역할 목록을 조회합니다."""
+        guild = ctx.guild
+        if not guild:
+            await ctx.reply("서버에서만 사용할 수 있습니다.")
+            return
+
+        member = self._find_bot_member(guild, target)
+        if not member:
+            await ctx.reply(f"`{target}`에 해당하는 봇(앱)을 찾을 수 없습니다.")
+            return
+
+        # @everyone 역할(guild.default_role)을 제외한 역할 목록 (상위 역할순 정렬)
+        roles = [r for r in reversed(member.roles) if r != guild.default_role]
+
+        if not roles:
+            await ctx.reply(
+                f"`{member.display_name}` ({member.id}) 에게 부여된 추가 역할이 없습니다. (`@everyone`만 보유)"
+            )
+            return
+
+        role_lines = [f"- {r.name} (ID: {r.id})" for r in roles]
+        roles_text = "\n".join(role_lines)
+
+        await ctx.reply(
+            f"**`{member.display_name}` ({member.id})** 역할 목록 ({len(roles)}개):\n"
+            f"```{roles_text}```"
+        )
+

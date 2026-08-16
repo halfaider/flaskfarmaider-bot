@@ -10,10 +10,21 @@ discord:
   token: 'zzzzzzzzzzzzzzzzzzzzzzzzzz.zzzzzz.zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
   command:
     prefix: '!'
-    checks:
+    broadcast:
       channels:
-        # 봇 명령어가 허용되는 채널
+        # 방송 명령어(gds, downloader 등)가 허용되는 채널 (생략시 모든 채널)
         - 1344xxxxxxxxxxx0822 # SJVA 서버의 구드공-방송 채널 ID
+    admin:
+      channels:
+        # 관리 명령어(roles 등)가 허용되는 채널 (생략시 모든 채널)
+        - 1234567890123456789
+  auto_roles:
+    # 앱(봇)이 서버에 참가했을 때 자동으로 부여할 역할 ID
+    1234567890123456789: # 서버 ID
+      roles:
+        - 1234567890123456789 # role ID
+      pattern: '^ffbot_.+$' # 앱(봇) 이름 정규표현식 (생략시 모든 봇에 부여)
+      channel: 1234567890123456789 # 결과 메시지를 출력할 채널 ID
 broadcast:
   # FlaskFarmBot 서버의 bot_gds_user(1250xxxxxxxxxxx2416) 채널에 본인의 봇으로 직접 방송이 가능함
   # 디스코드에서 본인의 봇을 생성후 FlaskFarmBot 서버에 메시지 전송 권한을 부여해서 설치
@@ -38,6 +49,14 @@ broadcast:
     # 방송을 보낼 채널 ID
     channels:
       - 1250xxxxxxxxxxx2416 # FlaskFarmBot 서버의 bot_gds_user 채널 ID
+  relay:
+    # 지정된 채널에서 수신한 메시지를 to 채널로 재전송
+    1234567890123456789:
+      - to: 1234567890123456789
+    1234567890123456789:
+      - to: 1234567890123456789
+        # 재전송할 메시지 정규표현식 (생략시 모든 메시지)
+        pattern: '^\^[A-Za-z0-9+/=]+$'
   encrypt:
     # Flaskfarm의 support.base.aes 에서 사용하는 key
     key: 140bxxxxxxxxxxxxxxxxxxxxxxxx7e14

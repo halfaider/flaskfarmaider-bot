@@ -26,23 +26,13 @@ def main(settings_file: str | os.PathLike | None = None) -> None:
         redacted_substitute=settings.logging.redacted_substitute,
     )
 
-    # Global check function
-    def check_channel(ctx: commands.Context) -> bool:
-        if valid_channels := settings.discord.command.checks.channels:
-            if not ctx.channel.id in valid_channels:
-                channel_name = getattr(ctx.channel, 'name', 'Unknown')
-                logger.error(f"Invalid channels: {channel_name} ({ctx.channel.id})")
-                return False
-        return True
-
-    # with everything enabled except presences, members, and message_content.
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.members = True
 
     bot = FlaskfarmaiderBot(
         command_prefix=settings.discord.command.prefix,
         settings=settings,
-        checks=[check_channel],
         description="flaskfarmaider-bot",
         intents=intents,
     )

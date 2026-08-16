@@ -26,22 +26,55 @@ class DiscordChannelsConfig(BaseModel):
     channels: tuple[int, ...] = ()
 
 
+class DiscordAutoRolesConfig(BaseModel):
+    roles: tuple[int, ...] = ()
+    pattern: str = ""
+    channel: int = 0
+
+    _compiled_pattern: re.Pattern | None = PrivateAttr(default=None)
+
+    @property
+    def compiled_pattern(self) -> re.Pattern | None:
+        return self._compiled_pattern
+
+    def model_post_init(self, context: Any, /) -> None:
+        if self.pattern:
+            self._compiled_pattern = re.compile(self.pattern, re.IGNORECASE)
+
+
 class DiscordCommandConfig(BaseModel):
-    checks: DiscordChannelsConfig
-    prefix: str = "/"
+    broadcast: DiscordChannelsConfig = Field(default_factory=DiscordChannelsConfig)
+    admin: DiscordChannelsConfig = Field(default_factory=DiscordChannelsConfig)
+    prefix: str = "!"
 
 
 class DiscordConfig(BaseModel):
     token: str = ""
-    command: DiscordCommandConfig
+    command: DiscordCommandConfig = Field(default_factory=DiscordCommandConfig)
+    auto_roles: dict[int, DiscordAutoRolesConfig] = Field(default_factory=dict)
 
 
 class BroadcastSourceConfig(DiscordChannelsConfig):
     authors: tuple[int, ...] = ()
 
 
-class BraodcastEncryptConfig(BaseModel):
+class BroadcastEncryptConfig(BaseModel):
     key: str = ""
+
+
+class BroadcastRelayTargetConfig(BaseModel):
+    to: int
+    pattern: str = ""
+
+    _compiled_pattern: re.Pattern | None = PrivateAttr(default=None)
+
+    @property
+    def compiled_pattern(self) -> re.Pattern | None:
+        return self._compiled_pattern
+
+    def model_post_init(self, context: Any, /) -> None:
+        if self.pattern:
+            self._compiled_pattern = re.compile(self.pattern, re.IGNORECASE)
 
 
 class ModuleRuleConfig(BaseModel):
@@ -104,7 +137,8 @@ class TmdbConfig(BaseModel):
 class BroadcastConfig(BaseModel):
     source: BroadcastSourceConfig
     target: DiscordChannelsConfig
-    encrypt: BraodcastEncryptConfig
+    encrypt: BroadcastEncryptConfig
+    relay: dict[int, tuple[BroadcastRelayTargetConfig, ...]] = Field(default_factory=dict)
 
     module_rules: tuple[ModuleRuleConfig, ...] = ()
     genre_by_subfolders: tuple[str, ...] = ()
