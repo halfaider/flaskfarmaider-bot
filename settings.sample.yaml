@@ -13,7 +13,7 @@ discord:
     broadcast:
       channels:
         # 방송 명령어(gds, downloader 등)가 허용되는 채널 (생략시 모든 채널)
-        - 1344xxxxxxxxxxx0822 # SJVA 서버의 구드공-방송 채널 ID
+        - 1234567890123456789 # SJVA 서버의 구드공-방송 채널 ID
     admin:
       channels:
         # 관리 명령어(roles 등)가 허용되는 채널 (생략시 모든 채널)
@@ -42,13 +42,13 @@ broadcast:
     # 채널 ID와 저자(웹훅) ID가 일치하고 메시지가 방송용 콘텐츠(```암호화된 문자열```)일 경우 방송
     # 봇 API로 방송할 경 경우 설정할 필요 없음
     #channels:
-    #  - xxxxxxxxxxxxxxxxxxx # 봇이 듣고 있을 채널 ID
+    #  - 1234567890123456789 # 봇이 듣고 있을 채널 ID
     #authors:
-    #  - yyyyyyyyyyyyyyyyyyy # 봇이 듣고 있을 채널의 웹훅 ID
+    #  - 1234567890123456789 # 봇이 듣고 있을 채널의 웹훅 ID
   target:
     # 방송을 보낼 채널 ID
     channels:
-      - 1250xxxxxxxxxxx2416 # FlaskFarmBot 서버의 bot_gds_user 채널 ID
+      - 1234567890123456789 # FlaskFarmBot 서버의 bot_gds_user 채널 ID
   relay:
     # 지정된 채널에서 수신한 메시지를 to 채널로 재전송
     1234567890123456789:

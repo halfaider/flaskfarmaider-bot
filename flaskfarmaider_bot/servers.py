@@ -1,12 +1,14 @@
 import logging
 import inspect
-from typing import Any, Callable, Awaitable, Sequence, TypeVar
+from typing import Any, Callable, Awaitable, Sequence, TypeVar, TYPE_CHECKING
 from functools import wraps
 
 from aiohttp import web
 
 from .models import APIConfig
-from .protocols import Broadcastable
+
+if TYPE_CHECKING:
+    from .bot import FlaskfarmaiderBot
 
 logger = logging.getLogger(__name__)
 
@@ -146,13 +148,9 @@ class Server:
         return web.Response(text=":)")
 
 
-class APIServer(Server):
-    pass
+class BotAPIServer(Server):
 
-
-class BotAPIServer(APIServer):
-
-    def __init__(self, bot: Broadcastable, settings: APIConfig, **kwds: Any) -> None:
+    def __init__(self, bot: "FlaskfarmaiderBot", settings: APIConfig, **kwds: Any) -> None:
         super(BotAPIServer, self).__init__(settings=settings, **kwds)
         self.bot = bot
 

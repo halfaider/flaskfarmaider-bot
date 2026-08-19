@@ -28,13 +28,18 @@ ffaider-bot
 /data/commands/flaskfarmaider-bot
     /flaskfarmaider_bot
         __init__.py
-        bots.py
+        bot.py
+        broadcast.py
+        cogs.py
+        help.py
         cli.py
-        ...
-        settings.sample.yaml
+        main.py
+        models.py
+        servers.py
+        /helpers
     .gitignore
-    ...
     requirements.txt
+    settings.sample.yaml
 ```
 
 이런 폴더 구조로 설치되어 있다고 가정할 경우 설정 파일은 아래의 순서대로 탐색됩니다.

@@ -10,6 +10,7 @@
 !pyproject.toml
 !README.md
 !requirements.txt
+!settings.sample.yaml
 
 # 블랙 리스트
 **/__pycache__

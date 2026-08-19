@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 import pydantic
 
-from .bots import FlaskfarmaiderBot
+from .bot import FlaskfarmaiderBot
 from .models import AppSettings
 from .helpers.loggers import set_logger
 
