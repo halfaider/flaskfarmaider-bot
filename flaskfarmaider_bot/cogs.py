@@ -127,7 +127,7 @@ class GDSBroadcastCog(commands.Cog, name="변경사항-방송"):
                         and mode == "ADD"
                     ):
                         invalid_paths.append(target)
-                    elif target.startswith("/ROOT/GDRIVE/"):
+                    elif target == "/ROOT/GDRIVE" or target.startswith("/ROOT/GDRIVE/"):
                         logger.debug(f"author={ctx.author.name} {mode=} {target=}")
                         await self.bot.broadcast_queue.put(
                             ("gds", {"path": target, "mode": mode})
@@ -285,6 +285,15 @@ class AdminCog(commands.Cog, name="관리"):
             return
 
         member = self._find_bot_member(guild, target)
+        if not member:
+            cleaned = target.strip("<@!>")
+            if cleaned.isdigit():
+                try:
+                    fetched = await guild.fetch_member(int(cleaned))
+                    if fetched and fetched.bot:
+                        member = fetched
+                except Exception:
+                    pass
         if not member:
             await ctx.reply(f"`{target}`에 해당하는 봇(앱)을 찾을 수 없습니다.")
             return

@@ -279,13 +279,17 @@ class BroadcastService:
         poster = None
         image_list = metadata.get("thumb") or metadata.get("art")
         if isinstance(image_list, list):
-            sorted_image_list = sorted(
-                image_list,
-                key=lambda x: (x.get("aspect") == "poster", x.get("score") or 0),
-                reverse=True,
-            )
-            if selected := next(iter(sorted_image_list), None):
-                poster = selected.get("value") or selected.get("thumb")
+            dict_images = [img for img in image_list if isinstance(img, dict)]
+            if dict_images:
+                sorted_image_list = sorted(
+                    dict_images,
+                    key=lambda x: (x.get("aspect") == "poster", x.get("score") or 0),
+                    reverse=True,
+                )
+                if selected := next(iter(sorted_image_list), None):
+                    poster = selected.get("value") or selected.get("thumb")
+            elif image_list and isinstance(image_list[0], str):
+                poster = image_list[0]
         else:
             poster = metadata.get("main_poster") or metadata.get("image_url")
         if not poster:
@@ -323,7 +327,11 @@ class BroadcastService:
         return text_bytes + padding
 
     def _unpad(self, padded_data: bytes) -> bytes:
+        if not padded_data:
+            return b""
         pad_len = padded_data[-1]
+        if pad_len < 1 or pad_len > len(padded_data):
+            return padded_data
         return padded_data[:-pad_len]
 
     def encrypt(self, content: str, key: str) -> str:
@@ -336,13 +344,17 @@ class BroadcastService:
         return result.decode()
 
     def decrypt(self, encoded: str, key: str) -> str:
-        decoded_bytes = base64.b64decode(encoded)
-        iv = decoded_bytes[: AES.block_size]
-        if len(iv) != AES.block_size:
-            iv = os.urandom(AES.block_size)
-        encrypted_content = decoded_bytes[AES.block_size :]
-        key_bytes = key.encode()
-        cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
-        decrypted_bytes = cipher.decrypt(encrypted_content)
-        unpadded_bytes = self._unpad(decrypted_bytes)
-        return unpadded_bytes.decode()
+        try:
+            decoded_bytes = base64.b64decode(encoded)
+            if len(decoded_bytes) < AES.block_size:
+                return ""
+            iv = decoded_bytes[: AES.block_size]
+            encrypted_content = decoded_bytes[AES.block_size :]
+            key_bytes = key.encode()
+            cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+            decrypted_bytes = cipher.decrypt(encrypted_content)
+            unpadded_bytes = self._unpad(decrypted_bytes)
+            return unpadded_bytes.decode("utf-8")
+        except Exception as e:
+            logger.warning(f"Decryption failed: {e}")
+            return ""

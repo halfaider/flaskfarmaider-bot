@@ -57,7 +57,8 @@ class Server:
         self.site: web.TCPSite | None = None
         aio_logger = logging.getLogger("aiohttp.access")
         aio_logger.setLevel(logging.DEBUG)
-        aio_logger.addHandler(logging.StreamHandler())
+        if not aio_logger.hasHandlers():
+            aio_logger.addHandler(logging.StreamHandler())
 
     @web.middleware
     async def check_api_key_middleware(

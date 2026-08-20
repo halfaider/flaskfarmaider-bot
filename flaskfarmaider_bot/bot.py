@@ -12,6 +12,7 @@ from .models import AppSettings
 from .help import FlaskfarmaiderHelpCommand
 from .broadcast import BroadcastService
 from .cogs import AdminCog, GDSBroadcastCog, DownloaderBroadcastCog
+from .helpers.helpers import get_int
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,12 @@ class FlaskfarmaiderBot(commands.Bot):
         """override"""
         logger.info(f"Logged in as {self.user}")
 
-    async def on_close(self) -> None:
+    async def close(self) -> None:
         """override"""
         for task in self.tasks.values():
             if not task.done():
                 task.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
-        await super().close()
         if self.session:
             await self.session.close()
         if self.api_server:
@@ -96,20 +96,24 @@ class FlaskfarmaiderBot(commands.Bot):
     async def on_error(self, event_method: str, *args: Any, **kwds: Any) -> None:
         """override"""
         exc_type, exc_value, exc_tb = sys.exc_info()
-        match exc_type:
-            case discord.errors.DiscordServerError:
-                logger.error(exc_value)
-                logger.debug("Retrying in 5 seconds...")
-                for _ in range(3):
-                    await asyncio.sleep(5)
-                    try:
-                        await getattr(self, event_method)(*args, **kwds)
-                        return
-                    except discord.errors.DiscordServerError as e:
-                        logger.exception(repr(e))
-                logger.error("Maximum retry count exceeded.")
-            case _:
-                await super().on_error(event_method, *args, **kwds)
+        if isinstance(exc_value, discord.DiscordServerError):
+            logger.error(exc_value)
+            logger.debug("Retrying in 5 seconds...")
+            for _ in range(3):
+                await asyncio.sleep(5)
+                try:
+                    event = getattr(self, event_method, None)
+                    if event and callable(event):
+                        await event(*args, **kwds)
+                    return
+                except discord.DiscordServerError as e:
+                    logger.exception(repr(e))
+                except Exception:
+                    logger.exception(f"Unexpected error in {event_method}")
+                    break
+            logger.error("Maximum retry count exceeded.")
+        else:
+            await super().on_error(event_method, *args, **kwds)
 
     async def on_command_error(
         self, ctx: commands.Context, error: commands.CommandError
@@ -127,17 +131,15 @@ class FlaskfarmaiderBot(commands.Bot):
             ),
         ):
             return
-        message = None
-        match type(error):
-            case commands.errors.CommandOnCooldown:
-                message = f"잠시 후에 시도해 주세요."
-            case commands.errors.MissingRequiredArgument:
-                message = f"추가 인자를 입력해 주세요."
-            case commands.errors.BadArgument:
-                message = f"잘못된 형식의 인자가 입력됐습니다."
-            case _:
-                await super().on_command_error(ctx, error)
-                message = f"오류가 발생했습니다."
+        if isinstance(error, commands.CommandOnCooldown):
+            message = "잠시 후에 시도해 주세요."
+        elif isinstance(error, commands.MissingRequiredArgument):
+            message = "추가 인자를 입력해 주세요."
+        elif isinstance(error, commands.BadArgument):
+            message = "잘못된 형식의 인자가 입력됐습니다."
+        else:
+            await super().on_command_error(ctx, error)
+            message = "오류가 발생했습니다."
         await ctx.reply(f"{message}\n> {str(error)}")
         if isinstance(
             error,
@@ -209,8 +211,8 @@ class FlaskfarmaiderBot(commands.Bot):
                     handler, data = await self.broadcast_queue.get()
                     path = data.get("path")
                     extra = data.get("mode") or data.get("item")
-                    file_count = data.get("file_count") or 1
-                    total_size = data.get("total_size") or 0
+                    file_count = get_int(data.get("file_count"), default=1)
+                    total_size = get_int(data.get("total_size"), default=0)
                     try:
                         await handlers[handler](path, extra, file_count, total_size)
                     except Exception:
