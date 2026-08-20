@@ -139,7 +139,7 @@ class BroadcastService:
                     first_result = {}
             else:
                 first_result = {}
-            if code := first_result.get("code"):
+            if isinstance(first_result, dict) and (code := first_result.get("code")):
                 return await self._lookup_metadata(code)
             else:
                 logger.warning(f"No code: {file_title=} {first_result=}")
@@ -149,7 +149,7 @@ class BroadcastService:
         self, keyword: str, category: str = "ktv", year: int = 1900
     ) -> dict | list:
         logger.debug(f"Search metadata: {keyword=} {category=}")
-        if not self.session:
+        if not self.session or self.session.closed:
             logger.error("Session is not initialized...")
             return {}
         api_path = f"/metadata/api/{category}/search"
@@ -157,8 +157,13 @@ class BroadcastService:
             "call": "plex",
             "manual": "True",
             "keyword": keyword,
-            "year": year,
         }
+        # year가 기본값 1900이면 점수 계산시 최신 년도가 불리함
+        try:
+            if year and int(year) > 1900:
+                query["year"] = int(year)
+        except (ValueError, TypeError):
+            pass
         url = urljoin(self.settings.flaskfarm.url, f"{api_path}?{urlencode(query)}")
         try:
             async with self.session.post(
