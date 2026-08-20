@@ -1,7 +1,7 @@
 #logging:
 #  level: DEBUG
 #  level_discord: INFO
-#  format: '%(asctime)s %(levelname)-8s %(message)s ... %(filename)s:%(lineno)d'
+#  format: '%(asctime)s.%(msecs)03d %(levelname)-8s %(message)s ... %(filename)s:%(lineno)d'
 #  date_format: '%Y-%m-%d %H:%M:%S'
 #  redacted_patterns: ['[''"]?(?:apikey|X-Plex-Token|token)[''"]?\s*[:=]\s*[''"]?([^''"&\s,{}]+)[''"]?', 'webhooks/([^/\s]+)/([^/\s]+)']
 #  redacted_substitute: "<REDACTED>"
