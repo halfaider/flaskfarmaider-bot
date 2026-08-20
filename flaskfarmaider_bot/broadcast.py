@@ -120,7 +120,7 @@ class BroadcastService:
                     else:
                         ott_site = None
                     if ott_site and (ott_result := search_result.get(ott_site)):
-                        logger.debug(f"Relative site: {ott_site} path={path_str}")
+                        logger.debug(f"site='{ott_site}' name='{path.name}'")
                         default_site = ott_result
 
                 # fallback
