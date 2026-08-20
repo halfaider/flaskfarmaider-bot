@@ -188,7 +188,7 @@ class FlaskfarmaiderBot(commands.Bot):
         self, path: str, mode: str, file_count: int = 0, total_size: int = 0
     ) -> None:
         content = self.broadcast_service.get_gds_content(path, mode, file_count, total_size)
-        logger.debug(f"Broadcast GDS: {mode=} {path=}")
+        logger.info(f"Broadcast GDS: {mode=} {path=}")
         await self._broadcast(content)
 
     async def broadcast_downloader(
@@ -197,7 +197,7 @@ class FlaskfarmaiderBot(commands.Bot):
         content = await self.broadcast_service.get_downloader_content(
             path, item, file_count=file_count, total_size=total_size
         )
-        logger.debug(
+        logger.info(
             f"Broadcast Downloader: {item=} {file_count=} {total_size=} {path=}"
         )
         await self._broadcast(content)
