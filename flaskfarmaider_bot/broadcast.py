@@ -14,6 +14,7 @@ from Crypto.Cipher import AES
 
 from .models import AppSettings
 from .helpers.parsers import filename_parse
+from .helpers.helpers import apply_cache, get_ttl_hash
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +45,14 @@ def calc_similarity(target: str | None, candidate: str | None) -> float:
         return 0.0
     if norm_target == norm_cand:
         return 1.0
-    if norm_target in norm_cand or norm_cand in norm_target:
-        return 0.85 + 0.1 * (
-            min(len(norm_target), len(norm_cand))
-            / max(len(norm_target), len(norm_cand))
-        )
+
+    min_len = min(len(norm_target), len(norm_cand))
+    max_len = max(len(norm_target), len(norm_cand))
+    len_ratio = min_len / max_len
+
+    if (norm_target in norm_cand or norm_cand in norm_target) and len_ratio >= 0.5:
+        return 0.75 + 0.2 * len_ratio
+
     return difflib.SequenceMatcher(None, norm_target, norm_cand).ratio()
 
 
@@ -144,6 +148,49 @@ class BroadcastService:
                 return mod_rule.metadata, mod_rule.bot_downloader
         return "ktv", "vod"
 
+    def _extract_candidates(
+        self, search_result: Any, ott_site: str | None = None
+    ) -> list[dict]:
+        if isinstance(search_result, list):
+            return [r for r in search_result if isinstance(r, dict)]
+        if isinstance(search_result, dict):
+            default_site = (ott_site and search_result.get(ott_site)) or search_result.get("daum")
+            if not default_site:
+                default_site = next((v for v in search_result.values() if v), {})
+            if isinstance(default_site, list):
+                return [r for r in default_site if isinstance(r, dict)]
+            if isinstance(default_site, dict) and default_site:
+                return [default_site]
+        return []
+
+    async def _search_candidates(
+        self, title: str, category: str, year: int, ott_site: str | None
+    ) -> list[dict]:
+        keywords = list(dict.fromkeys(self.settings.broadcast.get_search_keywords(title)))
+        for kw in keywords:
+            if res := await self._search_metadata(kw, category, year):
+                if candidates := self._extract_candidates(res, ott_site=ott_site):
+                    return candidates
+        return []
+
+    async def _find_candidate_pool(
+        self, titles: list[str], category: str, year: int, ott_site: str | None
+    ) -> list[dict]:
+        search_categories = sorted(["ftv", "ktv", "movie"], key=lambda x: x != category)
+        for cat in search_categories:
+            pool: list[dict] = []
+            seen: set[str] = set()
+            for title in titles:
+                for cand in await self._search_candidates(title, cat, year, ott_site):
+                    code = cand.get("code")
+                    if not code or code not in seen:
+                        if code:
+                            seen.add(code)
+                        pool.append(cand)
+            if pool:
+                return pool
+        return []
+
     async def _fetch_metadata(
         self,
         path: Path,
@@ -153,74 +200,58 @@ class BroadcastService:
         year: int = 1900,
     ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=} {path_title=} {year=}")
-        path_str = str(path)
-        if tmdb_id := self.settings.tmdb.get_tmdb_id(path_str):
+        ott_site = None
+        if self.settings.broadcast.is_relative_ott(path):
+            ott_site = "wavve" if path.stem.endswith("-SW") else ("tving" if path.stem.endswith("-ST") else None)
+
+        ttl_seconds = getattr(
+            getattr(self.settings, "broadcast", None), "metadata_cache_ttl", 300
+        )
+        return await self._query_metadata(
+            category=category,
+            file_title=file_title,
+            path_title=path_title,
+            year=year,
+            tmdb_id=self.settings.tmdb.get_tmdb_id(str(path)),
+            ott_site=ott_site,
+            ttl_hash=get_ttl_hash(ttl_seconds),
+        )
+
+    @apply_cache
+    async def _query_metadata(
+        self,
+        category: str,
+        file_title: str,
+        path_title: str | None,
+        year: int,
+        tmdb_id: str | None,
+        ott_site: str | None = None,
+        ttl_hash: int = 300,
+    ) -> dict[str, Any]:
+        _ = ttl_hash
+        if tmdb_id:
             code_prefix = "MT" if category == "movie" else "FT"
             return await self._lookup_metadata(f"{code_prefix}{tmdb_id}")
-        else:
-            raw_keywords = self.settings.broadcast.get_search_keywords(file_title)
-            search_keywords = list(dict.fromkeys(raw_keywords))
-            search_categories = sorted(
-                ["ftv", "ktv", "movie"], key=lambda x: x != category
-            )
-            search_targets = (
-                (cat, kw) for cat in search_categories for kw in search_keywords
-            )
-            search_result = None
-            for cat, kw in search_targets:
-                if search_result := await self._search_metadata(kw, cat, year):
-                    break
-            if not search_result:
-                logger.warning(f"No search results: {file_title=} {year=}")
-                return {}
 
-            first_result = {}
-            if isinstance(search_result, list) and search_result:
-                first_result = self._select_best_result(
-                    search_result,
-                    file_title=file_title,
-                    path_title=path_title,
-                    year=year,
-                )
-            # KTV 서치 목록
-            elif isinstance(search_result, dict):
-                default_site = search_result.get("daum") or {}
-                if self.settings.broadcast.is_relative_ott(path):
-                    if path.stem.endswith("-SW"):
-                        ott_site = "wavve"
-                    elif path.stem.endswith("-ST"):
-                        ott_site = "tving"
-                    else:
-                        ott_site = None
-                    if ott_site and (ott_result := search_result.get(ott_site)):
-                        logger.debug(f"site='{ott_site}' name='{path.name}'")
-                        default_site = ott_result
+        titles = [file_title]
+        if path_title and path_title.strip():
+            clean_path = path_title.strip()
+            if clean_path.lower() != file_title.strip().lower():
+                titles.append(clean_path)
 
-                # fallback
-                if not default_site:
-                    for result in search_result.values():
-                        if result:
-                            default_site = result
-                            break
+        candidates = await self._find_candidate_pool(titles, category, year, ott_site)
+        if not candidates:
+            logger.warning(f"No search results: {file_title=} {path_title=} {year=}")
+            return {}
 
-                # Daum은 dict, 나머지는 list
-                if isinstance(default_site, list) and default_site:
-                    first_result = self._select_best_result(
-                        default_site,
-                        file_title=file_title,
-                        path_title=path_title,
-                        year=year,
-                    )
-                elif isinstance(default_site, dict):
-                    first_result = default_site
-                else:
-                    first_result = {}
+        best = self._select_best_result(
+            candidates, file_title=file_title, path_title=path_title, year=year
+        )
+        if isinstance(best, dict) and (code := best.get("code")):
+            return await self._lookup_metadata(code)
 
-            if isinstance(first_result, dict) and (code := first_result.get("code")):
-                return await self._lookup_metadata(code)
-            else:
-                logger.warning(f"No code: {file_title=} {first_result=}")
-                return {}
+        logger.warning(f"No code: {file_title=} {path_title=} {best=}")
+        return {}
 
     def _select_best_result(
         self,
@@ -229,54 +260,43 @@ class BroadcastService:
         path_title: str | None = None,
         year: int = 1900,
     ) -> dict:
-        if not results:
+        valid = [r for r in results if isinstance(r, dict)]
+        if not valid:
             return {}
 
-        valid_results = [r for r in results if isinstance(r, dict)]
-        if not valid_results:
-            return {}
-
-        best_item = valid_results[0]
-        best_score = -1.0
-
-        for item in valid_results:
+        best_item, best_score = valid[0], -1.0
+        for item in valid:
             candidates = {val for k in TITLE_KEYS if (val := item.get(k))}
-            path_score = (
-                max((calc_similarity(path_title, cand) for cand in candidates), default=0.0)
+            p_score = (
+                max((calc_similarity(path_title, c) for c in candidates), default=0.0)
                 if path_title
                 else 0.0
             )
-            file_score = (
-                max((calc_similarity(file_title, cand) for cand in candidates), default=0.0)
+            f_score = (
+                max((calc_similarity(file_title, c) for c in candidates), default=0.0)
                 if file_title
                 else 0.0
             )
+            item_score = max(p_score * 1.1, f_score)
 
-            # path_title 매칭 우선 가중치(1.1), file_title 매칭 비교
-            item_score = max(path_score * 1.1, file_score)
-
-            # 연도 일치 보너스 (문자열 날짜 형식 등 지원)
             try:
                 if year and int(year) > 1900:
-                    raw_year_str = str(item.get("year") or item.get("premiered") or "")
-                    if (y_match := RE_YEAR.search(raw_year_str)) and int(
-                        y_match.group(1)
-                    ) == int(year):
+                    raw_year = str(item.get("year") or item.get("premiered") or "")
+                    if (m := RE_YEAR.search(raw_year)) and int(m.group(1)) == int(year):
                         item_score += 0.15
             except (ValueError, TypeError):
                 pass
 
             logger.debug(
                 f"Candidate score: '{item.get('title')}' ({item.get('code')}) -> "
-                f"total={item_score:.3f} (path_score={path_score:.3f}, file_score={file_score:.3f})"
+                f"total={item_score:.3f} (path_score={p_score:.3f}, file_score={f_score:.3f})"
             )
 
             if item_score >= 1.249:
                 return item
 
             if item_score > best_score:
-                best_score = item_score
-                best_item = item
+                best_score, best_item = item_score, item
 
         return best_item
 
@@ -313,7 +333,9 @@ class BroadcastService:
             )
         return {}
 
-    async def _lookup_metadata(self, code: str) -> dict:
+    @apply_cache
+    async def _lookup_metadata(self, code: str, ttl_hash: int = 300) -> dict:
+        _ = ttl_hash
         if not isinstance(code, str) or len(code) < 1:
             logger.warning(f"{code=}")
             return {}
