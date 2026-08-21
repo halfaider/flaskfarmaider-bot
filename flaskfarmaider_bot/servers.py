@@ -159,35 +159,34 @@ class Server:
     async def dummy_webhook(self, request: web.Request) -> web.Response:
         data = None
         content_type = request.content_type.lower() if request.content_type else ""
-        if request.can_read_body:
-            if content_type.startswith("application/json"):
-                try:
-                    data = await request.json()
-                except Exception:
-                    try:
-                        raw = await request.text()
-                        data = raw if raw else "(empty body)"
-                    except Exception:
-                        data = "<Invalid Body>"
-            elif content_type.startswith(
-                ("application/x-www-form-urlencoded", "multipart/form-data")
-            ):
-                try:
-                    post_data = await request.post()
-                    data = dict(post_data)
-                    if "payload_json" in data:
-                        try:
-                            data["payload_json"] = json.loads(data["payload_json"])
-                        except Exception:
-                            pass
-                except Exception:
-                    data = "<Invalid Form Data>"
-            else:
+        if content_type.startswith("application/json"):
+            try:
+                data = await request.json()
+            except Exception:
                 try:
                     raw = await request.text()
-                    data = raw if raw else None
+                    data = raw if raw else "(empty body)"
                 except Exception:
-                    pass
+                    data = "<Invalid Body>"
+        elif content_type.startswith(
+            ("application/x-www-form-urlencoded", "multipart/form-data")
+        ):
+            try:
+                post_data = await request.post()
+                data = dict(post_data)
+                if "payload_json" in data:
+                    try:
+                        data["payload_json"] = json.loads(data["payload_json"])
+                    except Exception:
+                        pass
+            except Exception:
+                data = "<Invalid Form Data>"
+        else:
+            try:
+                raw = await request.text()
+                data = raw if raw else None
+            except Exception:
+                pass
 
         log_lines = [
             f"[Dummy Webhook] Received {request.method} webhook: path={request.path}",
