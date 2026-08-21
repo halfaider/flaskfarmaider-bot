@@ -1,3 +1,4 @@
+import json
 import logging
 import inspect
 from typing import Any, Callable, Awaitable, Sequence, TypeVar, TYPE_CHECKING
@@ -111,16 +112,22 @@ class Server:
         for _, method in inspect.getmembers(self, predicate=inspect.ismethod):
             if hasattr(method, "route_path") and hasattr(method, "route_method"):
                 route_path = getattr(method, "route_path", "")
-                route_method_str = getattr(method, "route_method", "GET")
+                route_method_str = getattr(method, "route_method", "GET").upper()
                 route_auth_required = getattr(method, "route_auth_required", True)
-                route_method = f"add_{route_method_str.lower()}"
-                if hasattr(app.router, route_method):
-                    route_func = getattr(app.router, route_method, None)
-                    if route_func:
-                        logger.debug(
-                            f'Add route: path="{route_path}" method="{route_method_str}" auth_required={route_auth_required}'
-                        )
-                        route_func(route_path, method, name=method.__name__)
+                if route_method_str in ("*", "ANY"):
+                    logger.debug(
+                        f'Add route: path="{route_path}" method="*" auth_required={route_auth_required}'
+                    )
+                    app.router.add_route("*", route_path, method, name=method.__name__)
+                else:
+                    route_method = f"add_{route_method_str.lower()}"
+                    if hasattr(app.router, route_method):
+                        route_func = getattr(app.router, route_method, None)
+                        if route_func:
+                            logger.debug(
+                                f'Add route: path="{route_path}" method="{route_method_str}" auth_required={route_auth_required}'
+                            )
+                            route_func(route_path, method, name=method.__name__)
         self.runner = web.AppRunner(
             app,
             access_log=logger,
@@ -147,6 +154,66 @@ class Server:
     @route("/", "GET", False)
     async def index(self, request: web.Request) -> web.Response:
         return web.Response(text=":)")
+
+    @route("/api/webhook", "*", False)
+    async def dummy_webhook(self, request: web.Request) -> web.Response:
+        data = None
+        content_type = request.content_type.lower() if request.content_type else ""
+        if request.can_read_body:
+            if content_type.startswith("application/json"):
+                try:
+                    data = await request.json()
+                except Exception:
+                    try:
+                        raw = await request.text()
+                        data = raw if raw else "(empty body)"
+                    except Exception:
+                        data = "<Invalid Body>"
+            elif content_type.startswith(
+                ("application/x-www-form-urlencoded", "multipart/form-data")
+            ):
+                try:
+                    post_data = await request.post()
+                    data = dict(post_data)
+                    if "payload_json" in data:
+                        try:
+                            data["payload_json"] = json.loads(data["payload_json"])
+                        except Exception:
+                            pass
+                except Exception:
+                    data = "<Invalid Form Data>"
+            else:
+                try:
+                    raw = await request.text()
+                    data = raw if raw else None
+                except Exception:
+                    pass
+
+        log_lines = [
+            f"[Dummy Webhook] Received {request.method} webhook: path={request.path}",
+            f"  - Headers: {dict(request.headers)}",
+            f"  - Query: {dict(request.query)}",
+        ]
+
+        # Extract and display payload / content specifically if present
+        content_val = None
+        payload_val = None
+        if isinstance(data, dict):
+            content_val = data.get("content")
+            payload_val = data.get("payload") or data.get("payload_json")
+        elif request.query.get("content") or request.query.get("payload"):
+            content_val = request.query.get("content")
+            payload_val = request.query.get("payload")
+
+        if content_val is not None:
+            log_lines.append(f"  - Content: {content_val}")
+        if payload_val is not None:
+            log_lines.append(f"  - Payload: {payload_val}")
+        if data is not None:
+            log_lines.append(f"  - Data: {data}")
+
+        logger.info("\n".join(log_lines))
+        return web.Response(status=204)
 
 
 class BotAPIServer(Server):
