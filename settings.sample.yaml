@@ -91,6 +91,9 @@ broadcast:
     - '^.+?[-~](?P<title>.+?)[-~]'
     - '^[^\w\s\(\[](?P<title>.+?)[^\w\s\)\]]'
     - '^(?P<title>.+?)(?:\s*\(\d{4}\))?$'
+  ignore_title_patterns:
+    # 경로에서 타이틀로 인식하지 않고 건너뛸 폴더명 정규표현식 (생략시 기본값 적용)
+    - '^(?:Season|시즌|Specials|SP|Extras|bonus|extra|featurette|other|sample|screenshot|trailer|\[업로드\])\b.*'
 api:
   # api 설정
   # POST, http://0.0.0.0:8080/api/broadcast

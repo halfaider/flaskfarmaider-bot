@@ -144,10 +144,16 @@ class BroadcastConfig(BaseModel):
     genre_by_subfolders: tuple[str, ...] = ()
     ott_metadata_roots: tuple[str, ...] = ()
     title_patterns: tuple[str, ...] = ()
+    ignore_title_patterns: tuple[str, ...] = (
+        r"^(?:Season|시즌|Specials|SP|Extras|bonus|extra|featurette|other|sample|screenshot|trailer|\[업로드\])\b.*",
+    )
 
     _path_genre_by_subfolders: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
     _path_ott_metadata_roots: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
     _compiled_title_patterns: tuple[re.Pattern, ...] = PrivateAttr(
+        default_factory=tuple
+    )
+    _compiled_ignore_title_patterns: tuple[re.Pattern, ...] = PrivateAttr(
         default_factory=tuple
     )
 
@@ -163,6 +169,13 @@ class BroadcastConfig(BaseModel):
     def compiled_title_patterns(self) -> tuple[re.Pattern, ...]:
         return self._compiled_title_patterns
 
+    @property
+    def compiled_ignore_title_patterns(self) -> tuple[re.Pattern, ...]:
+        return self._compiled_ignore_title_patterns
+
+    def is_match_ignore_title(self, folder_name: str) -> bool:
+        return any(p.search(folder_name) for p in self._compiled_ignore_title_patterns)
+
     def model_post_init(self, context: Any, /) -> None:
         self._path_ott_metadata_roots = tuple(Path(r) for r in self.ott_metadata_roots)
         self._path_genre_by_subfolders = tuple(
@@ -170,6 +183,9 @@ class BroadcastConfig(BaseModel):
         )
         self._compiled_title_patterns = tuple(
             re.compile(p, re.IGNORECASE) for p in self.title_patterns
+        )
+        self._compiled_ignore_title_patterns = tuple(
+            re.compile(p, re.IGNORECASE) for p in self.ignore_title_patterns
         )
 
     def is_relative_ott(self, full_path: Path) -> bool:
