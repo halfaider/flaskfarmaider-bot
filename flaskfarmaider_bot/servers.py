@@ -155,7 +155,7 @@ class Server:
     async def index(self, request: web.Request) -> web.Response:
         return web.Response(text=":)")
 
-    @route("/api/webhook", "*", False)
+    @route("/api/webhook", "*", True)
     async def dummy_webhook(self, request: web.Request) -> web.Response:
         data = None
         content_type = request.content_type.lower() if request.content_type else ""
