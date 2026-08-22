@@ -343,7 +343,7 @@ class BroadcastService:
                 f"code='{item.get('code')}' site='{item.get('site')}' title='{item.get('title')}'"
             )
 
-        return scored_items[0][4]
+        return scored_items[-1][4]
 
     async def _search_metadata(
         self, keyword: str, category: str = "ktv", year: int = 1900
