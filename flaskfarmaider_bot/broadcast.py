@@ -95,8 +95,10 @@ class BroadcastService:
         path_title, path_year = self._extract_path_title(full_path)
         year = path_year or parsed_parts.get("year") or 1900
         is_series = bool(
-            parsed_parts.get("season") is not None
+            category != "movie"
+            or parsed_parts.get("season") is not None
             or parsed_parts.get("episode") is not None
+            or (parsed_parts.get("month") and parsed_parts.get("day"))
         )
         logger.debug(f"{parsed_parts=} {file_title=} {path_title=} {year=} {is_series=}")
         metadata = await self._fetch_metadata(
@@ -225,6 +227,8 @@ class BroadcastService:
                 for cand in await self._search_candidates(title, cat, year):
                     code = cand.get("code", "")
                     if is_series and code.startswith("KVM"):
+                        continue
+                    if category == "movie" and code.startswith("KVP"):
                         continue
                     if not code or code not in seen:
                         if code:
