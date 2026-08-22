@@ -154,13 +154,18 @@ class BroadcastService:
         if isinstance(search_result, list):
             return [r for r in search_result if isinstance(r, dict)]
         if isinstance(search_result, dict):
-            default_site = (ott_site and search_result.get(ott_site)) or search_result.get("daum")
-            if not default_site:
-                default_site = next((v for v in search_result.values() if v), {})
-            if isinstance(default_site, list):
-                return [r for r in default_site if isinstance(r, dict)]
-            if isinstance(default_site, dict) and default_site:
-                return [default_site]
+            if ott_site and (site_results := search_result.get(ott_site)):
+                if isinstance(site_results, list):
+                    return [r for r in site_results if isinstance(r, dict)]
+                if isinstance(site_results, dict) and site_results:
+                    return [site_results]
+            candidates: list[dict] = []
+            for items in search_result.values():
+                if isinstance(items, list):
+                    candidates.extend(r for r in items if isinstance(r, dict))
+                elif isinstance(items, dict) and items:
+                    candidates.append(items)
+            return candidates
         return []
 
     async def _search_candidates(
