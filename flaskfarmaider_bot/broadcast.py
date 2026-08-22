@@ -329,7 +329,7 @@ class BroadcastService:
                 pass
 
             if ott_site and item.get("site") == ott_site:
-                item_score += 0.15
+                item_score += 0.2
 
             logger.debug(
                 f"Candidate score: [{item.get('site')}] '{item.get('title')}' ({item.get('code')}) -> "
