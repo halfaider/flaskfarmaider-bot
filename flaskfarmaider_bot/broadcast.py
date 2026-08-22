@@ -308,7 +308,7 @@ class BroadcastService:
             return {}
 
         scored_items = []
-        for item in valid:
+        for idx, item in enumerate(valid):
             candidates = item.get("titles") or {item.get("title")}
             p_score = (
                 max((calc_similarity(path_title, c) for c in candidates), default=0.0)
@@ -333,17 +333,17 @@ class BroadcastService:
                 provider_score = 0.2
                 item_score += provider_score
 
-            scored_items.append((item_score, p_score, f_score, provider_score, item))
+            scored_items.append((item_score, -idx, p_score, f_score, provider_score, item))
 
-        scored_items.sort(key=lambda x: x[0])
+        scored_items.sort(key=lambda x: (x[0], x[1]))
 
-        for item_score, p_score, f_score, provider_score, item in scored_items:
+        for item_score, _, p_score, f_score, provider_score, item in scored_items:
             logger.debug(
                 f"total={item_score:.3f} path={p_score:.3f} file={f_score:.3f} provider={provider_score:.3f} "
                 f"code='{item.get('code')}' site='{item.get('site')}' title='{item.get('title')}'"
             )
 
-        return scored_items[-1][4]
+        return scored_items[-1][5]
 
     async def _search_metadata(
         self, keyword: str, category: str = "ktv", year: int = 1900
