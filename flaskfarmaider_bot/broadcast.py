@@ -236,11 +236,11 @@ class BroadcastService:
         year: int = 1900,
     ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=} {path_title=} {year=}")
-        ott_site = None
+        provider = None
         if path.stem.endswith("-SW"):
-            ott_site = "wavve"
+            provider = "wavve"
         elif path.stem.endswith("-ST"):
-            ott_site = "tving"
+            provider = "tving"
 
         ttl_seconds = getattr(
             getattr(self.settings, "broadcast", None), "metadata_cache_ttl", 300
@@ -251,7 +251,7 @@ class BroadcastService:
             path_title=path_title,
             year=year,
             tmdb_id=self.settings.tmdb.get_tmdb_id(str(path)),
-            ott_site=ott_site,
+            provider=provider,
             ttl_hash=get_ttl_hash(ttl_seconds),
         )
 
@@ -263,7 +263,7 @@ class BroadcastService:
         path_title: str | None,
         year: int,
         tmdb_id: str | None,
-        ott_site: str | None = None,
+        provider: str | None = None,
         ttl_hash: int = 300,
     ) -> dict[str, Any]:
         _ = ttl_hash
@@ -287,7 +287,7 @@ class BroadcastService:
             file_title=file_title,
             path_title=path_title,
             year=year,
-            ott_site=ott_site,
+            provider=provider,
         )
         if isinstance(best, dict) and (code := best.get("code")):
             return await self._lookup_metadata(code)
@@ -301,7 +301,7 @@ class BroadcastService:
         file_title: str | None = None,
         path_title: str | None = None,
         year: int = 1900,
-        ott_site: str | None = None,
+        provider: str | None = None,
     ) -> dict:
         valid = [r for r in results if isinstance(r, dict)]
         if not valid:
@@ -328,12 +328,14 @@ class BroadcastService:
             except (ValueError, TypeError):
                 pass
 
-            if ott_site and item.get("site") == ott_site:
-                item_score += 0.2
+            provider_score = 0.0
+            if provider and item.get("site") == provider:
+                provider_score = 0.2
+                item_score += provider_score
 
             logger.debug(
-                f"Candidate score: [{item.get('site')}] '{item.get('title')}' ({item.get('code')}) -> "
-                f"total={item_score:.3f} (path_score={p_score:.3f}, file_score={f_score:.3f}, ott={ott_site})"
+                f"[{item.get('site')}] '{item.get('title')}' ({item.get('code')}): "
+                f"total={item_score:.3f} (path={p_score:.3f}, file={f_score:.3f}, provider={provider_score:.3f})"
             )
 
             if item_score > best_score:
