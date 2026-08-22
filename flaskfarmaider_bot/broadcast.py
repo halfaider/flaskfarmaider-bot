@@ -307,7 +307,7 @@ class BroadcastService:
         if not valid:
             return {}
 
-        best_item, best_score = valid[0], -1.0
+        scored_items = []
         for item in valid:
             candidates = item.get("titles") or {item.get("title")}
             p_score = (
@@ -333,15 +333,17 @@ class BroadcastService:
                 provider_score = 0.2
                 item_score += provider_score
 
+            scored_items.append((item_score, p_score, f_score, provider_score, item))
+
+        scored_items.sort(key=lambda x: x[0])
+
+        for item_score, p_score, f_score, provider_score, item in scored_items:
             logger.debug(
-                f"[{item.get('site')}] '{item.get('title')}' ({item.get('code')}): "
-                f"total={item_score:.3f} (path={p_score:.3f}, file={f_score:.3f}, provider={provider_score:.3f})"
+                f"total={item_score:.3f} path={p_score:.3f} file={f_score:.3f} provider={provider_score:.3f} "
+                f"code='{item.get('code')}' site='{item.get('site')}' title='{item.get('title')}'"
             )
 
-            if item_score > best_score:
-                best_score, best_item = item_score, item
-
-        return best_item
+        return scored_items[0][4]
 
     async def _search_metadata(
         self, keyword: str, category: str = "ktv", year: int = 1900
