@@ -148,45 +148,76 @@ class BroadcastService:
                 return mod_rule.metadata, mod_rule.bot_downloader
         return "ktv", "vod"
 
-    def _extract_candidates(
-        self, search_result: Any, ott_site: str | None = None
-    ) -> list[dict]:
+    def _normalize_candidate(self, item: dict, site: str | None = None) -> dict | None:
+        code = item.get("code")
+        if not code:
+            return None
+
+        titles = {
+            str(val).strip()
+            for k in TITLE_KEYS
+            if (val := item.get(k)) and isinstance(val, str) and str(val).strip()
+        }
+        if not titles:
+            return None
+
+        year = None
+        raw_year = str(item.get("year") or item.get("premiered") or "")
+        if match := RE_YEAR.search(raw_year):
+            year = int(match.group(1))
+
+        detected_site = site or item.get("site")
+        if not detected_site and isinstance(code, str):
+            if code.startswith("KW"):
+                detected_site = "wavve"
+            elif code.startswith("KV"):
+                detected_site = "tving"
+            elif code.startswith("KX"):
+                detected_site = "watcha"
+            elif code.startswith("KD"):
+                detected_site = "daum"
+
+        return {
+            "code": str(code),
+            "title": str(item.get("title") or next(iter(titles))),
+            "titles": titles,
+            "year": year,
+            "site": detected_site,
+        }
+
+    def _extract_candidates(self, search_result: Any) -> list[dict]:
+        candidates: list[dict] = []
         if isinstance(search_result, list):
-            return [r for r in search_result if isinstance(r, dict)]
-        if isinstance(search_result, dict):
-            if ott_site and (site_results := search_result.get(ott_site)):
-                if isinstance(site_results, list):
-                    return [r for r in site_results if isinstance(r, dict)]
-                if isinstance(site_results, dict) and site_results:
-                    return [site_results]
-            candidates: list[dict] = []
-            for items in search_result.values():
-                if isinstance(items, list):
-                    candidates.extend(r for r in items if isinstance(r, dict))
-                elif isinstance(items, dict) and items:
-                    candidates.append(items)
-            return candidates
-        return []
+            for item in search_result:
+                if isinstance(item, dict) and (cand := self._normalize_candidate(item)):
+                    candidates.append(cand)
+        elif isinstance(search_result, dict):
+            for site_key, items in search_result.items():
+                item_list = items if isinstance(items, list) else [items]
+                for it in item_list:
+                    if isinstance(it, dict) and (cand := self._normalize_candidate(it, site=site_key)):
+                        candidates.append(cand)
+        return candidates
 
     async def _search_candidates(
-        self, title: str, category: str, year: int, ott_site: str | None
+        self, title: str, category: str, year: int
     ) -> list[dict]:
         keywords = list(dict.fromkeys(self.settings.broadcast.get_search_keywords(title)))
         for kw in keywords:
             if res := await self._search_metadata(kw, category, year):
-                if candidates := self._extract_candidates(res, ott_site=ott_site):
+                if candidates := self._extract_candidates(res):
                     return candidates
         return []
 
     async def _find_candidate_pool(
-        self, titles: list[str], category: str, year: int, ott_site: str | None
+        self, titles: list[str], category: str, year: int
     ) -> list[dict]:
         search_categories = sorted(["ftv", "ktv", "movie"], key=lambda x: x != category)
         for cat in search_categories:
             pool: list[dict] = []
             seen: set[str] = set()
             for title in titles:
-                for cand in await self._search_candidates(title, cat, year, ott_site):
+                for cand in await self._search_candidates(title, cat, year):
                     code = cand.get("code")
                     if not code or code not in seen:
                         if code:
@@ -206,8 +237,10 @@ class BroadcastService:
     ) -> dict[str, Any]:
         logger.debug(f"{category=} {file_title=} {path_title=} {year=}")
         ott_site = None
-        if self.settings.broadcast.is_relative_ott(path):
-            ott_site = "wavve" if path.stem.endswith("-SW") else ("tving" if path.stem.endswith("-ST") else None)
+        if path.stem.endswith("-SW"):
+            ott_site = "wavve"
+        elif path.stem.endswith("-ST"):
+            ott_site = "tving"
 
         ttl_seconds = getattr(
             getattr(self.settings, "broadcast", None), "metadata_cache_ttl", 300
@@ -244,13 +277,17 @@ class BroadcastService:
             if clean_path.lower() != file_title.strip().lower():
                 titles.append(clean_path)
 
-        candidates = await self._find_candidate_pool(titles, category, year, ott_site)
+        candidates = await self._find_candidate_pool(titles, category, year)
         if not candidates:
             logger.warning(f"No search results: {file_title=} {path_title=} {year=}")
             return {}
 
         best = self._select_best_result(
-            candidates, file_title=file_title, path_title=path_title, year=year
+            candidates,
+            file_title=file_title,
+            path_title=path_title,
+            year=year,
+            ott_site=ott_site,
         )
         if isinstance(best, dict) and (code := best.get("code")):
             return await self._lookup_metadata(code)
@@ -264,6 +301,7 @@ class BroadcastService:
         file_title: str | None = None,
         path_title: str | None = None,
         year: int = 1900,
+        ott_site: str | None = None,
     ) -> dict:
         valid = [r for r in results if isinstance(r, dict)]
         if not valid:
@@ -271,7 +309,7 @@ class BroadcastService:
 
         best_item, best_score = valid[0], -1.0
         for item in valid:
-            candidates = {val for k in TITLE_KEYS if (val := item.get(k))}
+            candidates = item.get("titles") or {item.get("title")}
             p_score = (
                 max((calc_similarity(path_title, c) for c in candidates), default=0.0)
                 if path_title
@@ -285,20 +323,18 @@ class BroadcastService:
             item_score = max(p_score * 1.1, f_score)
 
             try:
-                if year and int(year) > 1900:
-                    raw_year = str(item.get("year") or item.get("premiered") or "")
-                    if (m := RE_YEAR.search(raw_year)) and int(m.group(1)) == int(year):
-                        item_score += 0.15
+                if year and int(year) > 1900 and item.get("year") == int(year):
+                    item_score += 0.15
             except (ValueError, TypeError):
                 pass
 
-            logger.debug(
-                f"Candidate score: '{item.get('title')}' ({item.get('code')}) -> "
-                f"total={item_score:.3f} (path_score={p_score:.3f}, file_score={f_score:.3f})"
-            )
+            if ott_site and item.get("site") == ott_site:
+                item_score += 0.15
 
-            if item_score >= 1.249:
-                return item
+            logger.debug(
+                f"Candidate score: [{item.get('site')}] '{item.get('title')}' ({item.get('code')}) -> "
+                f"total={item_score:.3f} (path_score={p_score:.3f}, file_score={f_score:.3f}, ott={ott_site})"
+            )
 
             if item_score > best_score:
                 best_score, best_item = item_score, item
