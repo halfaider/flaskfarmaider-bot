@@ -91,16 +91,21 @@ class BroadcastService:
         full_path = Path(path)
         category, module = self._get_category_and_module(full_path)
         parsed_parts = filename_parse(full_path.name)
-        logger.debug(f"{parsed_parts=}")
         file_title = parsed_parts.get("title") or full_path.stem
         path_title, path_year = self._extract_path_title(full_path)
         year = path_year or parsed_parts.get("year") or 1900
+        is_series = bool(
+            parsed_parts.get("season") is not None
+            or parsed_parts.get("episode") is not None
+        )
+        logger.debug(f"{parsed_parts=} {file_title=} {path_title=} {year=} {is_series=}")
         metadata = await self._fetch_metadata(
             full_path,
             category,
             file_title=file_title,
             path_title=path_title,
             year=year,
+            is_series=is_series,
         )
         if category == "movie":
             builder = self._build_movie_data
@@ -210,7 +215,7 @@ class BroadcastService:
         return []
 
     async def _find_candidate_pool(
-        self, titles: list[str], category: str, year: int
+        self, titles: list[str], category: str, year: int, is_series: bool = False
     ) -> list[dict]:
         search_categories = sorted(["ftv", "ktv", "movie"], key=lambda x: x != category)
         for cat in search_categories:
@@ -218,7 +223,9 @@ class BroadcastService:
             seen: set[str] = set()
             for title in titles:
                 for cand in await self._search_candidates(title, cat, year):
-                    code = cand.get("code")
+                    code = cand.get("code", "")
+                    if is_series and code.startswith("KVM"):
+                        continue
                     if not code or code not in seen:
                         if code:
                             seen.add(code)
@@ -234,8 +241,9 @@ class BroadcastService:
         file_title: str,
         path_title: str | None = None,
         year: int = 1900,
+        is_series: bool = False,
     ) -> dict[str, Any]:
-        logger.debug(f"{category=} {file_title=} {path_title=} {year=}")
+        logger.debug(f"{category=} {file_title=} {path_title=} {year=} {is_series=}")
         provider = None
         if path.stem.endswith("-SW"):
             provider = "wavve"
@@ -252,6 +260,7 @@ class BroadcastService:
             year=year,
             tmdb_id=self.settings.tmdb.get_tmdb_id(str(path)),
             provider=provider,
+            is_series=is_series,
             ttl_hash=get_ttl_hash(ttl_seconds),
         )
 
@@ -264,6 +273,7 @@ class BroadcastService:
         year: int,
         tmdb_id: str | None,
         provider: str | None = None,
+        is_series: bool = False,
         ttl_hash: int = 300,
     ) -> dict[str, Any]:
         _ = ttl_hash
@@ -277,7 +287,9 @@ class BroadcastService:
             if clean_path.lower() != file_title.strip().lower():
                 titles.append(clean_path)
 
-        candidates = await self._find_candidate_pool(titles, category, year)
+        candidates = await self._find_candidate_pool(
+            titles, category, year, is_series=is_series
+        )
         if not candidates:
             logger.warning(f"No search results: {file_title=} {path_title=} {year=}")
             return {}
